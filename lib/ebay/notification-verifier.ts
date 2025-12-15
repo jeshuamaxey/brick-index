@@ -1,6 +1,7 @@
-import type { EbayNotificationConfig } from 'event-notification-nodejs-sdk';
-
 export type EbayEnvironment = 'PRODUCTION' | 'SANDBOX';
+
+// Minimal shape used by our verifier; we only care that it's an object.
+export type EbayNotificationConfig = Record<string, unknown>;
 
 /**
  * Lightweight, swappable implementation of the eBay notification "process" logic.
