@@ -27,6 +27,14 @@ describe('SimplePricePerPieceEvaluator', () => {
       first_seen_at: new Date(),
       last_seen_at: new Date(),
       status: 'active',
+      enriched_at: null,
+      enriched_raw_listing_id: null,
+      additional_images: [],
+      condition_description: null,
+      category_path: null,
+      item_location: null,
+      estimated_availabilities: null,
+      buying_options: [],
     };
 
     const analysis: ListingAnalysis = {
@@ -69,6 +77,14 @@ describe('SimplePricePerPieceEvaluator', () => {
       first_seen_at: new Date(),
       last_seen_at: new Date(),
       status: 'active',
+      enriched_at: null,
+      enriched_raw_listing_id: null,
+      additional_images: [],
+      condition_description: null,
+      category_path: null,
+      item_location: null,
+      estimated_availabilities: null,
+      buying_options: [],
     };
 
     const analysis: ListingAnalysis = {
@@ -111,6 +127,14 @@ describe('SimplePricePerPieceEvaluator', () => {
       first_seen_at: new Date(),
       last_seen_at: new Date(),
       status: 'active',
+      enriched_at: null,
+      enriched_raw_listing_id: null,
+      additional_images: [],
+      condition_description: null,
+      category_path: null,
+      item_location: null,
+      estimated_availabilities: null,
+      buying_options: [],
     };
 
     const analysis: ListingAnalysis = {
@@ -153,6 +177,14 @@ describe('SimplePricePerPieceEvaluator', () => {
       first_seen_at: new Date(),
       last_seen_at: new Date(),
       status: 'active',
+      enriched_at: null,
+      enriched_raw_listing_id: null,
+      additional_images: [],
+      condition_description: null,
+      category_path: null,
+      item_location: null,
+      estimated_availabilities: null,
+      buying_options: [],
     };
 
     const analysis: ListingAnalysis = {

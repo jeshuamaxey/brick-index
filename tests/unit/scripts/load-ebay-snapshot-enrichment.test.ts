@@ -228,7 +228,7 @@ describe('load-ebay-snapshot-into-supabase enrichment handling', () => {
         ],
       };
 
-      expect(snapshot.enrichedItems).toBeUndefined();
+      expect((snapshot as any).enrichedItems).toBeUndefined();
     });
 
     it('should map external_id to listing_id correctly', () => {

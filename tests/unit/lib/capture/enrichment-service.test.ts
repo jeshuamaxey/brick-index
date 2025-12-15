@@ -236,7 +236,7 @@ describe('EnrichmentService', () => {
         mocks.setQueryChain(queryChain);
 
         vi.spyOn(adapter, 'getItemDetails').mockResolvedValue({});
-        mocks.mockInsert.mockResolvedValue({ data: { id: 'raw-1' }, error: null });
+        mocks.mockInsertSelectSingle().single.mockResolvedValue({ data: { id: 'raw-1' }, error: null });
         // mockUpdate is already set up
 
         const result = await service.enrichListings(adapter, { limit: 5 });
