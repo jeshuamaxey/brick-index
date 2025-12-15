@@ -26,24 +26,17 @@ export async function POST(request: NextRequest) {
     let adapter;
     if (marketplace === 'ebay') {
       const ebayAppId = process.env.EBAY_APP_ID;
-      const dataMode =
-        process.env.EBAY_DATA_MODE ??
-        (ebayAppId ? 'live' : 'mock');
+      const dataMode = process.env.EBAY_DATA_MODE ?? 'live';
 
       if (dataMode === 'cache') {
         // Use snapshot-based adapter that never calls the live eBay API.
         adapter = new EbaySnapshotAdapter();
-      } else if (dataMode === 'mock') {
-        const { MockAdapter } = await import(
-          '@/lib/capture/marketplace-adapters/mock-adapter'
-        );
-        adapter = new MockAdapter();
       } else {
         if (!ebayAppId) {
           return NextResponse.json(
             {
               error:
-                'EBAY_APP_ID is required when EBAY_DATA_MODE=live. Either set EBAY_DATA_MODE=cache|mock or provide EBAY_APP_ID.',
+                'EBAY_APP_ID is required when EBAY_DATA_MODE=live. Either set EBAY_DATA_MODE=cache or provide EBAY_APP_ID.',
             },
             { status: 400 }
           );

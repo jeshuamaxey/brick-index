@@ -150,8 +150,8 @@ export default function CapturePage() {
             <strong>Searches for LEGO listings</strong> on eBay using keywords: "lego bulk", "lego job lot", "lego lot"
           </li>
           <li>
-            <strong>Uses mock data</strong> if <code className="bg-foreground/10 px-1 rounded text-foreground">EBAY_APP_ID</code> is not set, or{' '}
-            <strong>real eBay API</strong> if you have an App ID configured
+            <strong>Uses real eBay API</strong> if <code className="bg-foreground/10 px-1 rounded text-foreground">EBAY_APP_ID</code> is set, or{' '}
+            <strong>snapshot data</strong> if <code className="bg-foreground/10 px-1 rounded text-foreground">EBAY_DATA_MODE=cache</code> is configured
           </li>
           <li>
             <strong>Stores raw API responses</strong> in the <code className="bg-foreground/10 px-1 rounded text-foreground">raw_listings</code> table
@@ -167,7 +167,7 @@ export default function CapturePage() {
           </li>
         </ul>
         <p className="mt-3 text-sm text-foreground/70">
-          After capture completes, you can analyze the listings at <code className="bg-foreground/10 px-1 rounded text-foreground">/dev/analysis</code> or use the seed page to automatically capture and analyze.
+          After capture completes, you can analyze the listings at <code className="bg-foreground/10 px-1 rounded text-foreground">/dev/analysis</code> or use the seed page to analyze existing listings.
         </p>
       </div>
 
