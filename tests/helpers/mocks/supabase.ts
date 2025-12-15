@@ -30,7 +30,7 @@ export function createMockSupabaseClient(): Partial<SupabaseClient> {
       range: vi.fn().mockReturnThis(),
       single: vi.fn().mockResolvedValue({ data: null, error: null }),
       maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-    })),
+    })) as any,
   };
 }
 

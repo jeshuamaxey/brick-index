@@ -15,7 +15,11 @@ export function createTestRequest(
 ): NextRequest {
   const { method = 'GET', headers = {}, body } = options;
 
-  const requestInit: RequestInit = {
+  const requestInit: {
+    method: string;
+    headers: Record<string, string>;
+    body?: string;
+  } = {
     method,
     headers: {
       'content-type': 'application/json',
@@ -28,6 +32,7 @@ export function createTestRequest(
       typeof body === 'string' ? body : JSON.stringify(body);
   }
 
-  return new NextRequest(url, requestInit);
+  // Cast to any to avoid type incompatibility between standard RequestInit and Next.js RequestInit
+  return new NextRequest(url, requestInit as any);
 }
 

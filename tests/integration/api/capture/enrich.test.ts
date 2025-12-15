@@ -11,7 +11,7 @@ vi.mock('@/lib/capture/enrichment-service', () => ({
 
 // Mock EbayAdapter - return a proper constructor
 vi.mock('@/lib/capture/marketplace-adapters/ebay-adapter', () => ({
-  EbayAdapter: vi.fn().mockImplementation(function (appId: string, token?: string) {
+  EbayAdapter: vi.fn().mockImplementation(function (this: any, appId: string, token?: string) {
     this.getMarketplace = () => 'ebay' as const;
     this.getItemDetails = vi.fn();
     return this;
