@@ -22,7 +22,7 @@ A backend system to capture, analyze, and discover bulk LEGO job-lot listings fr
 
 1. Node.js 20+
 2. Supabase account and project
-3. eBay Developer account and App ID
+3. eBay Developer account with App ID and Client Secret (for OAuth authentication)
 4. Resend account and API key
 
 ### Installation
@@ -42,7 +42,8 @@ A backend system to capture, analyze, and discover bulk LEGO job-lot listings fr
 
    # eBay API
    EBAY_APP_ID=your_ebay_app_id
-   EBAY_OAUTH_APP_TOKEN=your_ebay_oauth_token
+   EBAY_CLIENT_SECRET=your_ebay_client_secret
+   EBAY_ENVIRONMENT=production  # or 'sandbox' for testing
 
    # Resend
    RESEND_API_KEY=your_resend_api_key

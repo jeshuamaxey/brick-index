@@ -102,7 +102,7 @@ npm run seed:fetch-ebay-snapshot
 
 **Required environment variables:**
 - `EBAY_APP_ID` - Your eBay production App ID
-- `EBAY_OAUTH_APP_TOKEN` - Your eBay OAuth access token (required for Browse API)
+- `EBAY_CLIENT_SECRET` - Your eBay OAuth client secret (for automatic token generation)
 
 The script:
 - Uses `EbayAdapter` to call the live eBay Browse API (`/buy/browse/v1/item_summary/search`).
@@ -130,7 +130,7 @@ npm run seed:enrich-ebay-snapshot
 
 **Required environment variables:**
 - `EBAY_APP_ID` - Your eBay production App ID
-- `EBAY_OAUTH_APP_TOKEN` - Your eBay OAuth access token (required for Browse API)
+- `EBAY_CLIENT_SECRET` - Your eBay OAuth client secret (for automatic token generation)
 
 The enrichment script:
 - Reads existing snapshot files
