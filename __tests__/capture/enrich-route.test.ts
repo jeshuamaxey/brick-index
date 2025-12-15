@@ -4,18 +4,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // Mock EnrichmentService
 const mockEnrichListings = vi.fn();
 vi.mock('@/lib/capture/enrichment-service', () => ({
-  EnrichmentService: vi.fn().mockImplementation(() => ({
-    enrichListings: mockEnrichListings,
-  })),
+  EnrichmentService: class {
+    enrichListings = mockEnrichListings;
+  },
 }));
 
-// Mock EbayAdapter
-const mockEbayAdapter = {
-  getMarketplace: () => 'ebay' as const,
-  getItemDetails: vi.fn(),
-};
+// Mock EbayAdapter - return a proper constructor
 vi.mock('@/lib/capture/marketplace-adapters/ebay-adapter', () => ({
-  EbayAdapter: vi.fn().mockImplementation(() => mockEbayAdapter),
+  EbayAdapter: vi.fn().mockImplementation(function (appId: string, token?: string) {
+    this.getMarketplace = () => 'ebay' as const;
+    this.getItemDetails = vi.fn();
+    return this;
+  }),
 }));
 
 // Mock Supabase client
@@ -31,8 +31,6 @@ describe('POST /api/capture/enrich', () => {
     vi.clearAllMocks();
     process.env.EBAY_APP_ID = 'test-app-id';
     process.env.EBAY_OAUTH_APP_TOKEN = 'test-token';
-    // Clear module cache to ensure fresh imports
-    vi.resetModules();
   });
 
   it('successfully triggers enrichment', async () => {
@@ -184,14 +182,20 @@ describe('POST /api/capture/enrich', () => {
       errors: [],
     });
 
+    // Create request with empty JSON object (valid but empty)
     const request = new NextRequest('http://localhost/api/capture/enrich', {
       method: 'POST',
       body: JSON.stringify({}),
+      headers: {
+        'Content-Type': 'application/json',
+      },
     });
 
     // Empty body should be handled
     const response = await POST(request);
     expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.total).toBe(0);
   });
 
   it('handles invalid JSON body gracefully', async () => {
