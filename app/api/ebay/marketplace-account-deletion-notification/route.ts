@@ -248,6 +248,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Persist the verified notification to Supabase.
+    // Note: supabaseServer uses service role key which bypasses RLS,
+    // allowing writes to the protected ebay_marketplace_account_deletion_notifications table
     try {
       console.info(
         '[eBay Deletion] Inserting notification into Supabase',

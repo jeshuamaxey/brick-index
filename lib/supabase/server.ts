@@ -1,4 +1,6 @@
 // Supabase client for server-side operations with admin access
+// This client uses the service role key which bypasses Row Level Security (RLS)
+// Required for operations that need to access RLS-protected tables
 
 import { createClient } from '@supabase/supabase-js';
 
@@ -11,17 +13,15 @@ if (!supabaseUrl) {
   );
 }
 
-// Use service role key if available (for admin operations), otherwise use anon key
-const supabaseKey =
-  supabaseServiceRoleKey || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseKey) {
+if (!supabaseServiceRoleKey) {
   throw new Error(
-    'Missing Supabase environment variable: SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY is required'
+    'Missing Supabase environment variable: SUPABASE_SERVICE_ROLE_KEY is required for admin operations. ' +
+    'This client bypasses RLS and is needed for server-side operations on protected tables.'
   );
 }
 
-export const supabaseServer = createClient(supabaseUrl, supabaseKey, {
+// Use service role key for admin operations (bypasses RLS)
+export const supabaseServer = createClient(supabaseUrl, supabaseServiceRoleKey, {
   auth: {
     autoRefreshToken: false,
     persistSession: false,
