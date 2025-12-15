@@ -1,45 +1,39 @@
-// API route to seed test data (for development without eBay API)
+// API route to analyze listings (for development)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase/client';
-import { CaptureService } from '@/lib/capture/capture-service';
-import { MockAdapter } from '@/lib/capture/marketplace-adapters/mock-adapter';
 import { AnalysisService } from '@/lib/analyze/analysis-service';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { action = 'all' } = body;
+    const { action = 'analyze' } = body;
 
     const results: Record<string, unknown> = {};
 
-    // Seed listings using mock adapter
-    if (action === 'listings' || action === 'all') {
-      const mockAdapter = new MockAdapter();
-      const captureService = new CaptureService(supabase);
-      const captureResult = await captureService.captureFromMarketplace(
-        mockAdapter,
-        ['lego bulk', 'lego job lot']
-      );
-      results.capture = captureResult;
-    }
-
     // Analyze all listings
-    if (action === 'analyze' || action === 'all') {
+    if (action === 'analyze') {
       const analysisService = new AnalysisService(supabase);
       const analyzedCount = await analysisService.analyzeUnanalyzedListings(
         100
       );
       results.analyzed = analyzedCount;
+    } else {
+      return NextResponse.json(
+        {
+          error: `Unknown action: ${action}. Supported action: 'analyze'`,
+        },
+        { status: 400 }
+      );
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Test data seeded successfully',
+      message: 'Analysis completed successfully',
       results,
     });
   } catch (error) {
-    console.error('Error seeding test data:', error);
+    console.error('Error analyzing listings:', error);
     return NextResponse.json(
       {
         error:
