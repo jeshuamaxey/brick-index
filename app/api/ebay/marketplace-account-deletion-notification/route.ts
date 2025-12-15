@@ -127,10 +127,17 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    console.info('[eBay Deletion] POST handler invoked');
+
     const signature = request.headers.get('x-ebay-signature') ?? undefined;
+    console.info('[eBay Deletion] Signature header present:', Boolean(signature));
 
     // Read raw body once so we can both verify the signature and parse JSON from it.
     const rawBody = await request.text();
+    console.info(
+      '[eBay Deletion] Raw body length:',
+      typeof rawBody === 'string' ? rawBody.length : 0,
+    );
 
     let body: unknown = null;
     if (rawBody) {
@@ -139,6 +146,7 @@ export async function POST(request: NextRequest) {
       } catch {
         // Leave body as null; we'll handle below.
       }
+      console.info('[eBay Deletion] JSON body parsed successfully');
     }
 
     if (!body || typeof body !== 'object') {
@@ -157,17 +165,20 @@ export async function POST(request: NextRequest) {
     if (!config) {
       // If SDK config is not available, do not accept the notification as valid.
       // Respond with 500 so that eBay can retry while configuration is fixed.
+      console.error('[eBay Deletion] SDK configuration missing; returning 500');
       return new Response(null, { status: 500 });
     }
 
     let responseCode: number;
     try {
+      console.info('[eBay Deletion] Calling EventNotificationSDK.process');
       responseCode = await EventNotificationSDK.process(
         body,
         signature,
         config,
         getEnvironmentKey(),
       );
+      console.info('[eBay Deletion] EventNotificationSDK.process responseCode:', responseCode);
     } catch (err) {
       console.error('Error during eBay notification signature verification:', err);
       return new Response(null, { status: 412 });
@@ -208,6 +219,15 @@ export async function POST(request: NextRequest) {
     const userId = data?.userId;
     const eiasToken = data?.eiasToken;
 
+    console.info('[eBay Deletion] Parsed notification payload', {
+      topic,
+      notificationId,
+      hasData: Boolean(data),
+      hasUsername: Boolean(username),
+      hasUserId: Boolean(userId),
+      hasEiasToken: Boolean(eiasToken),
+    });
+
     if (!notificationId) {
       // According to the eBay schema, notificationId should always be present.
       // If it's missing, don't attempt to persist (PK would fail) but still acknowledge.
@@ -219,6 +239,10 @@ export async function POST(request: NextRequest) {
 
     // Persist the verified notification to Supabase.
     try {
+      console.info(
+        '[eBay Deletion] Inserting notification into Supabase',
+        notificationId,
+      );
       const { error } = await supabaseServer
         .from('ebay_marketplace_account_deletion_notifications')
         .insert({
@@ -239,6 +263,11 @@ export async function POST(request: NextRequest) {
         console.error(
           'Failed to insert eBay marketplace account deletion notification into Supabase:',
           error,
+        );
+      } else {
+        console.info(
+          '[eBay Deletion] Successfully inserted notification into Supabase',
+          notificationId,
         );
       }
     } catch (dbError) {
