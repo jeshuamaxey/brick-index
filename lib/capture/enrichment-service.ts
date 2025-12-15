@@ -5,6 +5,7 @@ import type { MarketplaceAdapter } from './marketplace-adapters/base-adapter';
 import { EbayAdapter } from './marketplace-adapters/ebay-adapter';
 
 export interface EnrichmentResult {
+  jobId: string;
   total: number;
   succeeded: number;
   failed: number;
@@ -53,6 +54,10 @@ export class EnrichmentService {
     const marketplace = options.marketplace || adapter.getMarketplace();
     const limit = options.limit;
     const delayMs = options.delayMs ?? 200;
+    const jobId = crypto.randomUUID();
+    
+    // Determine job type based on marketplace
+    const jobType = `${marketplace}_enrich_listings` as const;
 
     // Check if adapter supports getItemDetails (currently only EbayAdapter)
     if (!('getItemDetails' in adapter)) {
@@ -64,6 +69,39 @@ export class EnrichmentService {
     const getItemDetails = (adapter as EbayAdapter).getItemDetails.bind(
       adapter as EbayAdapter
     );
+
+    // Create job record
+    const { data: job, error: jobError } = await this.supabase
+      .schema('pipeline')
+      .from('jobs')
+      .insert({
+        id: jobId,
+        type: jobType,
+        marketplace,
+        status: 'running',
+        listings_found: 0,
+        listings_new: 0,
+        listings_updated: 0,
+        started_at: new Date().toISOString(),
+        metadata: {
+          limit: limit || null,
+          delayMs,
+          marketplace,
+        },
+      })
+      .select()
+      .single();
+
+    if (jobError) {
+      console.error('Enrichment job creation error:', jobError);
+      throw new Error(
+        `Failed to create enrichment job: ${jobError.message || jobError.details || jobError.hint || JSON.stringify(jobError)}`
+      );
+    }
+
+    if (!job) {
+      throw new Error('Failed to create enrichment job: No data returned');
+    }
 
     // Query for unenriched listings
     let query = this.supabase
@@ -81,11 +119,35 @@ export class EnrichmentService {
     const { data: listings, error: queryError } = await query;
 
     if (queryError) {
+      // Update job with error
+      await this.supabase
+        .schema('pipeline')
+        .from('jobs')
+        .update({
+          status: 'failed',
+          completed_at: new Date().toISOString(),
+          error_message: `Failed to query listings: ${queryError.message}`,
+        })
+        .eq('id', jobId);
       throw new Error(`Failed to query listings: ${queryError.message}`);
     }
 
     if (!listings || listings.length === 0) {
+      // Update job as completed with no work
+      await this.supabase
+        .schema('pipeline')
+        .from('jobs')
+        .update({
+          status: 'completed',
+          listings_found: 0,
+          listings_new: 0,
+          listings_updated: 0,
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', jobId);
+      
       return {
+        jobId,
         total: 0,
         succeeded: 0,
         failed: 0,
@@ -94,6 +156,7 @@ export class EnrichmentService {
     }
 
     const result: EnrichmentResult = {
+      jobId,
       total: listings.length,
       succeeded: 0,
       failed: 0,
@@ -164,6 +227,35 @@ export class EnrichmentService {
           errorMessage
         );
       }
+    }
+
+    // Update job with final results
+    const { error: updateJobError } = await this.supabase
+      .schema('pipeline')
+      .from('jobs')
+      .update({
+        status: result.failed === result.total ? 'failed' : 'completed',
+        listings_found: result.total,
+        listings_new: result.succeeded,
+        listings_updated: result.failed,
+        completed_at: new Date().toISOString(),
+        error_message: result.failed > 0 && result.succeeded === 0 
+          ? `All ${result.total} listings failed to enrich`
+          : result.failed > 0
+          ? `${result.failed} of ${result.total} listings failed to enrich`
+          : null,
+        metadata: {
+          ...(job.metadata as Record<string, unknown> || {}),
+          limit: limit || null,
+          delayMs,
+          marketplace,
+          errors: result.errors,
+        },
+      })
+      .eq('id', jobId);
+
+    if (updateJobError) {
+      console.error('Error updating enrichment job:', updateJobError);
     }
 
     return result;

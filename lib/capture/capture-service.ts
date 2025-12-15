@@ -3,7 +3,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { MarketplaceAdapter } from './marketplace-adapters/base-adapter';
 import { DeduplicationService } from './deduplication-service';
-import type { CaptureJob, RawListing, Listing } from '@/lib/types';
+import type { Job, RawListing, Listing } from '@/lib/types';
 
 export class CaptureService {
   private deduplicationService: DeduplicationService;
@@ -23,22 +23,30 @@ export class CaptureService {
     adapter: MarketplaceAdapter,
     keywords: string[] = ['lego bulk', 'lego job lot', 'lego lot'],
     adapterParams?: unknown
-  ): Promise<CaptureJob> {
+  ): Promise<Job> {
     const marketplace = adapter.getMarketplace();
     const jobId = crypto.randomUUID();
+    
+    // Determine job type based on marketplace
+    const jobType = `${marketplace}_refresh_listings` as const;
 
-    // Create capture job record
+    // Create job record
     const { data: job, error: jobError } = await this.supabase
       .schema('pipeline')
-      .from('capture_jobs')
+      .from('jobs')
       .insert({
         id: jobId,
+        type: jobType,
         marketplace,
         status: 'running',
         listings_found: 0,
         listings_new: 0,
         listings_updated: 0,
         started_at: new Date().toISOString(),
+        metadata: {
+          keywords,
+          adapterParams: adapterParams || null,
+        },
       })
       .select()
       .single();
@@ -170,10 +178,10 @@ export class CaptureService {
         }
       }
 
-      // Update capture job
+      // Update job
       const { error: updateJobError } = await this.supabase
         .schema('pipeline')
-        .from('capture_jobs')
+        .from('jobs')
         .update({
           status: 'completed',
           listings_found: listingsFound,
@@ -189,6 +197,7 @@ export class CaptureService {
 
       return {
         id: jobId,
+        type: jobType,
         marketplace,
         status: 'completed',
         listings_found: listingsFound,
@@ -197,15 +206,16 @@ export class CaptureService {
         started_at: new Date(job.started_at),
         completed_at: new Date(),
         error_message: null,
+        metadata: job.metadata || {},
       };
     } catch (error) {
-      // Update capture job with error
+      // Update job with error
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
 
       await this.supabase
         .schema('pipeline')
-        .from('capture_jobs')
+        .from('jobs')
         .update({
           status: 'failed',
           completed_at: new Date().toISOString(),
@@ -215,6 +225,7 @@ export class CaptureService {
 
       return {
         id: jobId,
+        type: jobType,
         marketplace,
         status: 'failed',
         listings_found: 0,
@@ -223,6 +234,7 @@ export class CaptureService {
         started_at: new Date(job.started_at),
         completed_at: new Date(),
         error_message: errorMessage,
+        metadata: job.metadata || {},
       };
     }
   }
