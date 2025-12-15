@@ -40,5 +40,5 @@ jobs:
       - name: Push migrations to production
         run: |
           # Apply all pending migrations from supabase/migrations to the linked production project
-          supabase db push --db-password "$SUPABASE_DB_PASSWORD"
+          supabase db push
 
