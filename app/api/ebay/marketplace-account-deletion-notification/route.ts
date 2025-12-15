@@ -14,7 +14,7 @@ import { EventNotificationSDK } from 'event-notification-nodejs-sdk';
 
 const VERIFICATION_TOKEN = process.env.EBAY_MARKETPLACE_DELETION_VERIFICATION_TOKEN;
 const CALLBACK_URL = process.env.EBAY_MARKETPLACE_DELETION_CALLBACK_URL;
-const EBAY_CLIENT_ID = process.env.EBAY_CLIENT_ID;
+const EBAY_APP_ID = process.env.EBAY_APP_ID;
 const EBAY_CLIENT_SECRET = process.env.EBAY_CLIENT_SECRET;
 const EBAY_DEV_ID = process.env.EBAY_DEV_ID;
 const EBAY_REDIRECT_URI = process.env.EBAY_REDIRECT_URI;
@@ -29,9 +29,9 @@ let ebayNotificationSdk: EbayNotificationSdk | null = null;
 function getEbayNotificationSdk(): EbayNotificationSdk | null {
   if (ebayNotificationSdk) return ebayNotificationSdk;
 
-  if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET || !CALLBACK_URL || !VERIFICATION_TOKEN) {
+  if (!EBAY_APP_ID || !EBAY_CLIENT_SECRET || !CALLBACK_URL || !VERIFICATION_TOKEN) {
     const missingVars = [
-      !EBAY_CLIENT_ID && 'EBAY_CLIENT_ID',
+      !EBAY_APP_ID && 'EBAY_CLIENT_ID',
       !EBAY_CLIENT_SECRET && 'EBAY_CLIENT_SECRET',
       !CALLBACK_URL && 'EBAY_MARKETPLACE_DELETION_CALLBACK_URL',
       !VERIFICATION_TOKEN && 'EBAY_MARKETPLACE_DELETION_VERIFICATION_TOKEN',
@@ -48,7 +48,7 @@ function getEbayNotificationSdk(): EbayNotificationSdk | null {
 
   ebayNotificationSdk = new EventNotificationSDK({
     PRODUCTION: {
-      clientId: EBAY_CLIENT_ID,
+      clientId: EBAY_APP_ID,
       clientSecret: EBAY_CLIENT_SECRET,
       devId: EBAY_DEV_ID ?? '',
       redirectUri: EBAY_REDIRECT_URI ?? '',
