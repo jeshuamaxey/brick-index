@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
 import { supabaseServer } from '@/lib/supabase/server';
-import { EventNotificationSDK } from 'event-notification-nodejs-sdk';
+import * as EventNotificationSDK from 'event-notification-nodejs-sdk';
 
 // Environment variables:
 // - EBAY_MARKETPLACE_DELETION_VERIFICATION_TOKEN: verification token configured in eBay Dev Portal
@@ -18,20 +17,14 @@ const EBAY_APP_ID = process.env.EBAY_APP_ID;
 const EBAY_CLIENT_SECRET = process.env.EBAY_CLIENT_SECRET;
 const EBAY_DEV_ID = process.env.EBAY_DEV_ID;
 const EBAY_REDIRECT_URI = process.env.EBAY_REDIRECT_URI;
-const EBAY_ENVIRONMENT = process.env.EBAY_ENVIRONMENT ?? 'production';
+const EBAY_ENVIRONMENT = process.env.EBAY_ENVIRONMENT ?? 'PRODUCTION';
 
-type EbayNotificationSdk = {
-  verifyNotification: (req: unknown) => Promise<boolean>;
-};
+type EbayNotificationEnvironment = 'PRODUCTION' | 'SANDBOX';
 
-let ebayNotificationSdk: EbayNotificationSdk | null = null;
-
-function getEbayNotificationSdk(): EbayNotificationSdk | null {
-  if (ebayNotificationSdk) return ebayNotificationSdk;
-
+function getSdkConfig(): EventNotificationSDK.EbayNotificationConfig | null {
   if (!EBAY_APP_ID || !EBAY_CLIENT_SECRET || !CALLBACK_URL || !VERIFICATION_TOKEN) {
     const missingVars = [
-      !EBAY_APP_ID && 'EBAY_CLIENT_ID',
+      !EBAY_APP_ID && 'EBAY_APP_ID',
       !EBAY_CLIENT_SECRET && 'EBAY_CLIENT_SECRET',
       !CALLBACK_URL && 'EBAY_MARKETPLACE_DELETION_CALLBACK_URL',
       !VERIFICATION_TOKEN && 'EBAY_MARKETPLACE_DELETION_VERIFICATION_TOKEN',
@@ -43,11 +36,13 @@ function getEbayNotificationSdk(): EbayNotificationSdk | null {
     return null;
   }
 
-  const baseUrl =
-    EBAY_ENVIRONMENT === 'sandbox' ? 'api.sandbox.ebay.com' : 'api.ebay.com';
+  const envKey: EbayNotificationEnvironment =
+    EBAY_ENVIRONMENT === 'SANDBOX' ? 'SANDBOX' : 'PRODUCTION';
 
-  ebayNotificationSdk = new EventNotificationSDK({
-    PRODUCTION: {
+  const baseUrl = envKey === 'SANDBOX' ? 'api.sandbox.ebay.com' : 'api.ebay.com';
+
+  return {
+    [envKey]: {
       clientId: EBAY_APP_ID,
       clientSecret: EBAY_CLIENT_SECRET,
       devId: EBAY_DEV_ID ?? '',
@@ -56,9 +51,7 @@ function getEbayNotificationSdk(): EbayNotificationSdk | null {
     },
     endpoint: CALLBACK_URL,
     verificationToken: VERIFICATION_TOKEN,
-  } as unknown);
-
-  return ebayNotificationSdk;
+  };
 }
 
 /**
@@ -81,22 +74,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (!VERIFICATION_TOKEN || !CALLBACK_URL) {
-      console.error(
-        'EBAY_MARKETPLACE_DELETION_VERIFICATION_TOKEN or EBAY_MARKETPLACE_DELETION_CALLBACK_URL is not set',
-      );
+    const config = getSdkConfig();
+    if (!config) {
       return NextResponse.json(
         { error: 'Server not configured for eBay marketplace account deletion verification' },
         { status: 500 },
       );
     }
 
-    const hash = crypto.createHash('sha256');
-    hash.update(challengeCode);
-    hash.update(VERIFICATION_TOKEN);
-    hash.update(CALLBACK_URL);
-
-    const challengeResponse = hash.digest('hex');
+    const challengeResponse = EventNotificationSDK.validateEndpoint(
+      challengeCode,
+      config,
+    );
 
     return NextResponse.json(
       { challengeResponse },
@@ -134,7 +123,6 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const sdk = getEbayNotificationSdk();
     const signature = request.headers.get('x-ebay-signature') ?? undefined;
 
     // Read raw body once so we can both verify the signature and parse JSON from it.
@@ -161,30 +149,27 @@ export async function POST(request: NextRequest) {
       return new Response(null, { status: 412 });
     }
 
-    if (!sdk) {
-      // If SDK is not configured correctly, do not accept the notification as valid.
+    const config = getSdkConfig();
+    if (!config) {
+      // If SDK config is not available, do not accept the notification as valid.
       // Respond with 500 so that eBay can retry while configuration is fixed.
       return new Response(null, { status: 500 });
     }
 
-    const fakeReq: { headers: Record<string, string>; body: unknown } = {
-      headers: Object.fromEntries(request.headers),
-      body,
-    };
-
-    let isValid = false;
+    let responseCode: number;
     try {
-      // SDK handles:
-      // 1. Decoding signature header
-      // 2. Retrieving public key via Notification API (with caching)
-      // 3. Verifying signature against payload
-      isValid = await sdk.verifyNotification(fakeReq);
+      responseCode = await EventNotificationSDK.process(
+        body,
+        signature,
+        config,
+        EBAY_ENVIRONMENT as EbayNotificationEnvironment,
+      );
     } catch (err) {
       console.error('Error during eBay notification signature verification:', err);
       return new Response(null, { status: 412 });
     }
-
-    if (!isValid) {
+    // Per SDK example, NO_CONTENT (204) == success, PRECONDITION_FAILED (412) == bad signature.
+    if (responseCode === 412) {
       console.warn('eBay marketplace account deletion notification failed signature verification');
       return new Response(null, { status: 412 });
     }
