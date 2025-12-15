@@ -1,0 +1,27 @@
+{
+  "profile": "test-profile",
+  "mode": "normal",
+  "keywords": [
+    "lego bulk"
+  ],
+  "createdAt": "2025-12-15T17:56:58.949Z",
+  "items": [
+    {
+      "itemId": "123",
+      "title": "Test LEGO Bulk Lot",
+      "itemWebUrl": "https://www.ebay.com/itm/123",
+      "image": {
+        "imageUrl": "https://example.com/image1.jpg"
+      },
+      "price": {
+        "value": "100.00",
+        "currency": "USD"
+      },
+      "seller": {
+        "username": "seller123",
+        "feedbackScore": 100,
+        "feedbackPercentage": "99.0"
+      }
+    }
+  ]
+}

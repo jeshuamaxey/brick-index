@@ -19,27 +19,21 @@ describe('EbaySnapshotAdapter', () => {
       createdAt: new Date().toISOString(),
       items: [
         {
-          itemId: ['123'],
-          title: ['Test LEGO Bulk Lot'],
-          viewItemURL: ['https://www.ebay.com/itm/123'],
-          galleryURL: ['https://example.com/image1.jpg'],
-          sellingStatus: [
-            {
-              currentPrice: [
-                {
-                  '@currencyId': 'USD',
-                  __value__: '100.00',
-                },
-              ],
-            },
-          ],
-          sellerInfo: [
-            {
-              sellerUserName: ['seller123'],
-              feedbackScore: ['100'],
-              positiveFeedbackPercent: ['99.0'],
-            },
-          ],
+          itemId: '123',
+          title: 'Test LEGO Bulk Lot',
+          itemWebUrl: 'https://www.ebay.com/itm/123',
+          image: {
+            imageUrl: 'https://example.com/image1.jpg',
+          },
+          price: {
+            value: '100.00',
+            currency: 'USD',
+          },
+          seller: {
+            username: 'seller123',
+            feedbackScore: 100,
+            feedbackPercentage: '99.0',
+          },
         },
       ],
     };
