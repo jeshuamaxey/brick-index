@@ -2,6 +2,7 @@
 
 import type { Marketplace, Listing } from '@/lib/types';
 import type { MarketplaceAdapter } from './base-adapter';
+import { getEbayAccessToken } from '@/lib/ebay/oauth-token-service';
 
 interface EbayBrowseApiResponse {
   itemSummaries?: Array<{
@@ -87,11 +88,8 @@ export class EbayAdapter implements MarketplaceAdapter {
     if (!appId) {
       throw new Error('eBay App ID is required');
     }
-    if (!oauthToken) {
-      throw new Error(
-        'eBay OAuth token is required for Browse API. Set EBAY_OAUTH_APP_TOKEN in your environment.'
-      );
-    }
+    // oauthToken is optional - if not provided, will be fetched automatically via OAuth service
+    // This maintains backward compatibility for testing/mocking scenarios
     this.appId = appId;
     this.oauthToken = oauthToken;
 
@@ -112,6 +110,20 @@ export class EbayAdapter implements MarketplaceAdapter {
 
   getMarketplace(): Marketplace {
     return 'ebay';
+  }
+
+  /**
+   * Ensure we have a valid OAuth token.
+   * If a token was provided in the constructor, use it.
+   * Otherwise, fetch a new token using the OAuth service.
+   */
+  private async ensureToken(): Promise<string> {
+    if (this.oauthToken) {
+      return this.oauthToken;
+    }
+    // Fetch token automatically using OAuth service
+    this.oauthToken = await getEbayAccessToken();
+    return this.oauthToken;
   }
 
   async searchListings(
@@ -160,9 +172,12 @@ export class EbayAdapter implements MarketplaceAdapter {
     // Note: Browse API doesn't have a direct equivalent, so we'll skip this for now
 
     try {
+      // Ensure we have a valid token before making the request
+      const token = await this.ensureToken();
+      
       // Build headers - Browse API requires OAuth Bearer token
       const headers: HeadersInit = {
-        Authorization: `Bearer ${this.oauthToken}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       };
 
@@ -289,9 +304,12 @@ export class EbayAdapter implements MarketplaceAdapter {
     const url = `${this.browseBaseUrl}/item/${encodeURIComponent(itemId)}`;
 
     try {
+      // Ensure we have a valid token before making the request
+      const token = await this.ensureToken();
+      
       // eBay Browse API authentication - requires OAuth Bearer token
       const headers: HeadersInit = {
-        Authorization: `Bearer ${this.oauthToken}`,
+        Authorization: `Bearer ${token}`,
         'X-EBAY-C-MARKETPLACE-ID': this.defaultMarketplaceId,
         'Accept': 'application/json',
       };
