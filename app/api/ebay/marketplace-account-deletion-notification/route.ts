@@ -17,9 +17,14 @@ const EBAY_APP_ID = process.env.EBAY_APP_ID;
 const EBAY_CLIENT_SECRET = process.env.EBAY_CLIENT_SECRET;
 const EBAY_DEV_ID = process.env.EBAY_DEV_ID;
 const EBAY_REDIRECT_URI = process.env.EBAY_REDIRECT_URI;
-const EBAY_ENVIRONMENT = process.env.EBAY_ENVIRONMENT ?? 'PRODUCTION';
-
 type EbayNotificationEnvironment = 'PRODUCTION' | 'SANDBOX';
+
+function getEnvironmentKey(): EbayNotificationEnvironment {
+  const raw = (process.env.EBAY_ENVIRONMENT ?? '').toUpperCase();
+  if (raw === 'SANDBOX') return 'SANDBOX';
+  // Default to PRODUCTION for any other value (including empty / 'production')
+  return 'PRODUCTION';
+}
 
 function getSdkConfig(): EventNotificationSDK.EbayNotificationConfig | null {
   if (!EBAY_APP_ID || !EBAY_CLIENT_SECRET || !CALLBACK_URL || !VERIFICATION_TOKEN) {
@@ -36,8 +41,7 @@ function getSdkConfig(): EventNotificationSDK.EbayNotificationConfig | null {
     return null;
   }
 
-  const envKey: EbayNotificationEnvironment =
-    EBAY_ENVIRONMENT === 'SANDBOX' ? 'SANDBOX' : 'PRODUCTION';
+  const envKey = getEnvironmentKey();
 
   const baseUrl = envKey === 'SANDBOX' ? 'api.sandbox.ebay.com' : 'api.ebay.com';
 
@@ -162,7 +166,7 @@ export async function POST(request: NextRequest) {
         body,
         signature,
         config,
-        EBAY_ENVIRONMENT as EbayNotificationEnvironment,
+        getEnvironmentKey(),
       );
     } catch (err) {
       console.error('Error during eBay notification signature verification:', err);
