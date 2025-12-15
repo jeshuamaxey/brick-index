@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase/server';
 import * as EventNotificationSDK from 'event-notification-nodejs-sdk';
+import {
+  processEbayNotification,
+  type EbayNotificationConfig,
+} from '@/lib/ebay/notification-verifier';
 
 // Environment variables:
 // - EBAY_MARKETPLACE_DELETION_VERIFICATION_TOKEN: verification token configured in eBay Dev Portal
@@ -26,7 +30,7 @@ function getEnvironmentKey(): EbayNotificationEnvironment {
   return 'PRODUCTION';
 }
 
-function getSdkConfig(): EventNotificationSDK.EbayNotificationConfig | null {
+function getSdkConfig(): EbayNotificationConfig | null {
   if (!EBAY_APP_ID || !EBAY_CLIENT_SECRET || !CALLBACK_URL || !VERIFICATION_TOKEN) {
     const missingVars = [
       !EBAY_APP_ID && 'EBAY_APP_ID',
@@ -169,21 +173,17 @@ export async function POST(request: NextRequest) {
       return new Response(null, { status: 500 });
     }
 
-    let responseCode: number;
-    try {
-      console.info('[eBay Deletion] Calling EventNotificationSDK.process');
-      responseCode = await EventNotificationSDK.process(
-        body,
-        signature,
-        config,
-        getEnvironmentKey(),
-      );
-      console.info('[eBay Deletion] EventNotificationSDK.process responseCode:', responseCode);
-    } catch (err) {
-      console.error('Error during eBay notification signature verification:', err);
-      // Treat SDK errors as internal failures so eBay can retry.
-      return new Response(null, { status: 500 });
-    }
+    console.info('[eBay Deletion] Using custom notification verifier');
+    const responseCode = await processEbayNotification(
+      body,
+      signature,
+      config,
+      getEnvironmentKey(),
+    );
+    console.info(
+      '[eBay Deletion] Custom verifier processEbayNotification responseCode:',
+      responseCode,
+    );
     // Per SDK example, NO_CONTENT (204) == success, PRECONDITION_FAILED (412) == bad signature.
     if (responseCode !== 204) {
       if (responseCode === 412) {
@@ -248,6 +248,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Persist the verified notification to Supabase.
+    // Note: supabaseServer uses service role key which bypasses RLS,
+    // allowing writes to the protected ebay_marketplace_account_deletion_notifications table
     try {
       console.info(
         '[eBay Deletion] Inserting notification into Supabase',
@@ -299,11 +301,13 @@ export async function POST(request: NextRequest) {
     // Acknowledge receipt as required by eBay
     return new Response(null, { status: 202 });
   } catch (error) {
-    // Per eBay docs, they will retry if callback URL is not acknowledged.
-    // We still try to acknowledge the notification with a success code to avoid
-    // repeated retries if the error is due to internal processing.
-    console.error('Error processing eBay marketplace account deletion notification:', error);
-    return new Response(null, { status: 202 });
+    // Per eBay docs, eBay will retry if the callback URL is not acknowledged with a success code.
+    // Since this is an unexpected top-level failure, return 500 so that eBay will retry later.
+    console.error(
+      'Error processing eBay marketplace account deletion notification (top-level handler error):',
+      error,
+    );
+    return new Response(null, { status: 500 });
   }
 }
 
