@@ -90,6 +90,7 @@ async function selectSnapshots(
         mode: 'normal',
         createdAt: new Date().toISOString(),
         keywords: [],
+        itemCount: 0,
       },
     ];
   }
