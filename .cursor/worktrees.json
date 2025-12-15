@@ -1,0 +1,6 @@
+{
+  "setup-worktree": [
+    "cp /Users/jeshua/dev/bricks/.env.local .env.local",
+    "npm install"
+  ]
+}
