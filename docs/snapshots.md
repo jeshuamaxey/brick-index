@@ -7,7 +7,8 @@ This document explains how to capture real eBay responses once and reuse them lo
 Run these npm scripts to manage eBay snapshots:
 
 - **`npm run seed:fetch-ebay-snapshot`** - Fetch live data from eBay Browse API and save as snapshot files
-- **`npm run seed:load-ebay-snapshot-into-supabase`** - Load snapshot files into Supabase database
+- **`npm run seed:enrich-ebay-snapshot`** - Enrich snapshot files with detailed item data from `getItem` API
+- **`npm run seed:load-ebay-snapshot-into-supabase`** - Load snapshot files into Supabase database (includes enriched data)
 - **`npm run seed:delete-ebay-snapshots`** - Delete all snapshot files (use `--confirm` flag)
 
 ## Overview
@@ -43,6 +44,21 @@ Each snapshot file looks like this (simplified):
     }
   ],
   "originalItemCount": 42,
+  "enrichedItems": {
+    "123456789": {
+      "itemId": "123456789",
+      "description": "Full listing description...",
+      "additionalImages": [{ "imageUrl": "https://..." }],
+      "conditionDescription": "Used - Good",
+      "categoryPath": "Toys & Hobbies > Building Toys > LEGO",
+      "itemLocation": { "city": "San Francisco", "stateOrProvince": "CA" }
+    }
+  },
+  "enrichmentMetadata": {
+    "enrichedAt": "2025-01-01T13:00:00.000Z",
+    "enrichedCount": 1,
+    "failedCount": 0
+  },
   "error": {
     "code": "SIMULATED_EBAY_ERROR",
     "message": "Simulated error for testing"
@@ -65,13 +81,16 @@ Each snapshot file looks like this (simplified):
       "mode": "normal",
       "createdAt": "2025-01-01T12:34:56.000Z",
       "keywords": ["lego bulk", "lego job lot", "lego lot"],
-      "itemCount": 100
+      "itemCount": 100,
+      "enrichedItemCount": 95
     }
   ]
 }
 ```
 
 ## Creating snapshots
+
+### Step 1: Fetch Initial Snapshots
 
 Run the snapshot script in an environment that has valid eBay credentials:
 
@@ -94,6 +113,41 @@ The script:
   - Synthetic error responses (no live API call).
 - Writes one JSON file per profile plus an updated `_index.json` (which includes item counts for each snapshot).
 - **Note**: The script automatically sets `EBAY_ENVIRONMENT=production` to ensure snapshots are always fetched from production.
+
+### Step 2: Enrich Snapshots (Optional)
+
+Enrich snapshots with detailed item information from the `getItem` API:
+
+```bash
+npm run seed:enrich-ebay-snapshot
+# Or target a specific profile:
+# npm run seed:enrich-ebay-snapshot -- --profile=broad-bulk-lots
+# Or a specific file:
+# npm run seed:enrich-ebay-snapshot -- --file=my-snapshot.json
+# Force re-enrichment of already enriched snapshots:
+# npm run seed:enrich-ebay-snapshot -- --force
+```
+
+**Required environment variables:**
+- `EBAY_APP_ID` - Your eBay production App ID
+- `EBAY_OAUTH_APP_TOKEN` - Your eBay OAuth access token (required for Browse API)
+
+The enrichment script:
+- Reads existing snapshot files
+- For each item in the snapshot, calls `getItem` API to get detailed information
+- Stores enriched responses in `enrichedItems` object within the snapshot file
+- Updates `enrichmentMetadata` with enrichment statistics
+- Skips already-enriched snapshots unless `--force` flag is used
+- Includes configurable delay between API calls (default: 200ms) via `--delay-ms` flag
+
+**Enrichment adds:**
+- Full listing descriptions
+- Additional images
+- Detailed condition descriptions
+- Category paths
+- Item location data
+- Estimated availabilities
+- Buying options
 
 ## Using snapshots in local dev
 
@@ -130,6 +184,10 @@ This script:
 - Uses `supabaseServer` and `CaptureService`.
 - Wraps `EbaySnapshotAdapter` so that all snapshot items are treated like a regular capture job.
 - By default, loads all normal snapshots (excludes empty/error snapshots unless you use `--include-empty` or `--include-error` flags).
+- **Automatically detects and loads enriched data** if present in snapshot files:
+  - Creates separate `raw_listing` entries for enriched responses
+  - Updates listings with extracted enrichment fields (description, additional_images, etc.)
+  - Maintains backward compatibility with non-enriched snapshots
 - **No OAuth credentials are required** - the snapshot adapter uses dummy credentials internally.
 
 ## Deleting snapshots
@@ -155,8 +213,17 @@ To test different behaviours:
 ## API Details
 
 The snapshot system uses the **eBay Browse API** (not the legacy Finding API):
+
+### Search API (Initial Capture)
 - Endpoint: `https://api.ebay.com/buy/browse/v1/item_summary/search`
-- Authentication: OAuth Bearer token (required for fetching snapshots)
+- Authentication: OAuth Bearer token (required)
 - Response format: RESTful JSON with `itemSummaries` array
+- Used by: `fetch-ebay-snapshot.ts` script
+
+### GetItem API (Enrichment)
+- Endpoint: `https://api.ebay.com/buy/browse/v1/item/{itemId}`
+- Authentication: OAuth Bearer token (required)
+- Response format: Detailed item information including description, images, condition, etc.
+- Used by: `enrich-ebay-snapshot.ts` script
 
 The Browse API provides more modern, structured responses compared to the legacy Finding API.

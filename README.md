@@ -42,6 +42,7 @@ A backend system to capture, analyze, and discover bulk LEGO job-lot listings fr
 
    # eBay API
    EBAY_APP_ID=your_ebay_app_id
+   EBAY_OAUTH_APP_TOKEN=your_ebay_oauth_token
 
    # Resend
    RESEND_API_KEY=your_resend_api_key
@@ -89,6 +90,7 @@ All data related to user-facing features:
 
 - `POST /api/capture/trigger` - Trigger a capture job
 - `GET /api/capture/status/[jobId]` - Get capture job status
+- `POST /api/capture/enrich` - Trigger enrichment process for unenriched listings
 
 ### Analysis
 
@@ -137,9 +139,10 @@ See [Pipeline Documentation](./docs/pipeline.md) for a detailed description of h
 
 The pipeline flows as follows:
 
-1. **Capture**: Marketplace APIs (eBay) → Raw API responses stored in `pipeline.raw_listings` → Transformed into structured `pipeline.listings`
-2. **Analyze**: `pipeline.listings` → Text extraction (piece count, minifigs, condition) → Value evaluation (price per piece) → Stored in `pipeline.listing_analysis`
-3. **Discover**: `pipeline.listings` + `pipeline.listing_analysis` + `public.searches` → Matching service finds relevant listings → Results stored in `public.search_results` → Email alerts sent via Resend
+1. **Capture**: Marketplace Search API (eBay) → Raw API responses stored in `pipeline.raw_listings` → Transformed into structured `pipeline.listings` (basic data)
+2. **Enrichment** (Optional): Unenriched `pipeline.listings` → Browse API `getItem` endpoint → Detailed data (description, images, condition, etc.) → Updated `pipeline.listings` with enrichment fields
+3. **Analyze**: `pipeline.listings` (with description) → Text extraction (piece count, minifigs, condition) → Value evaluation (price per piece) → Stored in `pipeline.listing_analysis`
+4. **Discover**: `pipeline.listings` + `pipeline.listing_analysis` + `public.searches` → Matching service finds relevant listings → Results stored in `public.search_results` → Email alerts sent via Resend
 
 ## Value Evaluation
 
