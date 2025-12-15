@@ -86,9 +86,9 @@ interface AggregateData {
       monthly: Array<{ date: string; total: number; withAnalysis: number; completionRate: number }>;
     };
     statusOverTime: {
-      daily: Array<Record<string, number | string>>;
-      weekly: Array<Record<string, number | string>>;
-      monthly: Array<Record<string, number | string>>;
+      daily: Array<{ date: string } & Record<string, number | string>>;
+      weekly: Array<{ date: string } & Record<string, number | string>>;
+      monthly: Array<{ date: string } & Record<string, number | string>>;
     };
   };
 }
@@ -236,7 +236,9 @@ export default function AggregatePage() {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }) =>
+                      `${name}: ${(((percent ?? 0) * 100).toFixed(0))}%`
+                    }
                     outerRadius={80}
                     fill="#8884d8"
                     dataKey="value"
@@ -629,7 +631,9 @@ export default function AggregatePage() {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ condition, percent }) => `${condition}: ${(percent * 100).toFixed(0)}%`}
+                    label={({ name, value, percent }) =>
+                      `${name ?? value}: ${(((percent ?? 0) * 100).toFixed(0))}%`
+                    }
                     outerRadius={80}
                     fill="#8884d8"
                     dataKey="count"

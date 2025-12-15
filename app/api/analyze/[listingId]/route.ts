@@ -6,10 +6,10 @@ import { AnalysisService } from '@/lib/analyze/analysis-service';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { listingId: string } }
+  context: { params: Promise<{ listingId: string }> }
 ) {
   try {
-    const { listingId } = params;
+    const { listingId } = await context.params;
 
     const analysisService = new AnalysisService(supabase);
     const result = await analysisService.analyzeListing(listingId);
