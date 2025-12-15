@@ -87,6 +87,23 @@ const createMockSupabase = () => {
     return updateChain;
   });
 
+  // Mock jobs insert
+  let mockJobsInsertSelectSingle: any = null;
+  const mockJobsInsertSelect = vi.fn(() => {
+    if (!mockJobsInsertSelectSingle) {
+      mockJobsInsertSelectSingle = {
+        single: vi.fn().mockResolvedValue({ 
+          data: { id: 'job-1', metadata: {} }, 
+          error: null 
+        }),
+      };
+    }
+    return mockJobsInsertSelectSingle;
+  });
+  const mockJobsInsert = vi.fn(() => ({
+    select: mockJobsInsertSelect,
+  }));
+
   const mockFrom = vi.fn((table: string) => {
     if (table === 'raw_listings') {
       return {
@@ -96,6 +113,12 @@ const createMockSupabase = () => {
     if (table === 'listings') {
       return {
         select: mockSelect,
+        update: mockUpdate,
+      };
+    }
+    if (table === 'jobs') {
+      return {
+        insert: mockJobsInsert,
         update: mockUpdate,
       };
     }
@@ -199,12 +222,14 @@ describe('EnrichmentService', () => {
 
         const result = await service.enrichListings(adapter);
 
+        expect(result.jobId).toBeDefined();
         expect(result.total).toBe(2);
         expect(result.succeeded).toBe(2);
         expect(result.failed).toBe(0);
         expect(result.errors).toHaveLength(0);
         expect(mocks.mockInsert).toHaveBeenCalledTimes(2);
-        expect(mocks.mockUpdate).toHaveBeenCalledTimes(2);
+        // Update is called for each listing (2) + job update (1) = 3
+        expect(mocks.mockUpdate).toHaveBeenCalledTimes(3);
       });
 
       it('handles empty result set', async () => {
@@ -216,10 +241,13 @@ describe('EnrichmentService', () => {
 
         const result = await service.enrichListings(adapter);
 
+        expect(result.jobId).toBeDefined();
         expect(result.total).toBe(0);
         expect(result.succeeded).toBe(0);
         expect(result.failed).toBe(0);
         expect(result.errors).toHaveLength(0);
+        // Job should still be created and updated even with no listings
+        expect(mocks.mockUpdate).toHaveBeenCalled();
       });
 
       it('respects limit parameter', async () => {
