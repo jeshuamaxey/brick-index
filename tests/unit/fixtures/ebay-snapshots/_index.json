@@ -4,7 +4,7 @@
       "file": "test-snapshot.json",
       "profile": "test-profile",
       "mode": "normal",
-      "createdAt": "2025-12-15T17:56:58.949Z",
+      "createdAt": "2025-12-15T20:04:23.455Z",
       "keywords": [
         "lego bulk"
       ],
@@ -14,7 +14,7 @@
       "file": "error-snapshot.json",
       "profile": "error-profile",
       "mode": "error",
-      "createdAt": "2025-12-15T17:56:59.032Z",
+      "createdAt": "2025-12-15T20:04:23.460Z",
       "keywords": [],
       "itemCount": 0
     }
