@@ -79,8 +79,12 @@ export interface EbaySearchParams {
 export class EbayAdapter implements MarketplaceAdapter {
   private appId: string;
   private baseUrl: string;
+<<<<<<< Updated upstream
   private oauthToken?: string;
   private defaultMarketplaceId: string;
+=======
+  private browseBaseUrl: string;
+>>>>>>> Stashed changes
 
   constructor(appId: string, oauthToken?: string) {
     if (!appId) {
@@ -96,6 +100,7 @@ export class EbayAdapter implements MarketplaceAdapter {
 
     // Support both production and sandbox/staging environments.
     const environment = process.env.EBAY_ENVIRONMENT ?? 'production';
+<<<<<<< Updated upstream
     const isSandbox = environment === 'sandbox';
     this.baseUrl = isSandbox
       ? 'https://api.sandbox.ebay.com/buy/browse/v1'
@@ -104,6 +109,16 @@ export class EbayAdapter implements MarketplaceAdapter {
     // Default marketplace ID (can be overridden in search params)
     this.defaultMarketplaceId =
       process.env.EBAY_MARKETPLACE_ID || 'EBAY_US';
+=======
+    this.baseUrl =
+      environment === 'sandbox'
+        ? 'https://svcs.sandbox.ebay.com/services/search/FindingService/v1'
+        : 'https://svcs.ebay.com/services/search/FindingService/v1';
+    this.browseBaseUrl =
+      environment === 'sandbox'
+        ? 'https://api.sandbox.ebay.com/buy/browse/v1'
+        : 'https://api.ebay.com/buy/browse/v1';
+>>>>>>> Stashed changes
   }
 
   getMarketplace(): Marketplace {
@@ -250,7 +265,20 @@ export class EbayAdapter implements MarketplaceAdapter {
       updated_at: new Date(),
       first_seen_at: new Date(),
       last_seen_at: new Date(),
+<<<<<<< Updated upstream
       status: isActive ? 'active' : 'expired',
+=======
+      status: 'active',
+      // Enrichment fields - will be populated by enrichment service
+      enriched_at: null,
+      enriched_raw_listing_id: null,
+      additional_images: [],
+      condition_description: null,
+      category_path: null,
+      item_location: null,
+      estimated_availabilities: null,
+      buying_options: [],
+>>>>>>> Stashed changes
     };
   }
 
@@ -260,4 +288,76 @@ export class EbayAdapter implements MarketplaceAdapter {
     // This is a placeholder
     return true;
   }
+<<<<<<< Updated upstream
+=======
+
+  /**
+   * Get detailed item information from eBay Browse API
+   * @param itemId - The eBay item ID (legacy format is accepted)
+   * @returns Raw API response from getItem endpoint
+   */
+  async getItemDetails(itemId: string): Promise<Record<string, unknown>> {
+    if (!itemId) {
+      throw new Error('Item ID is required');
+    }
+
+    // The Browse API accepts both RESTful format (v1|...) and legacy format
+    // Since we get legacy IDs from the search API, we can use them directly
+    const url = `${this.browseBaseUrl}/item/${encodeURIComponent(itemId)}`;
+
+    try {
+      // eBay Browse API authentication
+      // Note: Browse API may require OAuth tokens for some operations
+      // For public item data, App ID authentication via header should work
+      const response = await fetch(url, {
+        headers: {
+          'X-EBAY-SOA-SECURITY-APPNAME': this.appId,
+          'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US', // Default to US marketplace
+          'Accept': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error(`Item not found: ${itemId}`);
+        }
+        if (response.status === 429) {
+          throw new Error('Rate limit exceeded. Please retry after delay.');
+        }
+        const errorText = await response.text();
+        throw new Error(
+          `eBay Browse API error: ${response.status} ${response.statusText}. ${errorText}`
+        );
+      }
+
+      const data = await response.json();
+      return data as Record<string, unknown>;
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error(`Error fetching eBay item details for ${itemId}:`, error.message);
+        throw error;
+      }
+      throw new Error(`Unknown error fetching item details for ${itemId}`);
+    }
+  }
+
+  private extractItemsFromResponse(
+    data: EbayFindingApiResponse
+  ): EbayItem[] {
+    const items: EbayItem[] = [];
+
+    const response =
+      data.findItemsByKeywordsResponse?.[0]?.searchResult?.[0]?.item;
+
+    if (response && Array.isArray(response)) {
+      for (const item of response) {
+        if (item) {
+          items.push(item);
+        }
+      }
+    }
+
+    return items;
+  }
+>>>>>>> Stashed changes
 }
