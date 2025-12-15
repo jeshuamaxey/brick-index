@@ -30,10 +30,15 @@ function getEbayNotificationSdk(): EbayNotificationSdk | null {
   if (ebayNotificationSdk) return ebayNotificationSdk;
 
   if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET || !CALLBACK_URL || !VERIFICATION_TOKEN) {
+    const missingVars = [
+      !EBAY_CLIENT_ID && 'EBAY_CLIENT_ID',
+      !EBAY_CLIENT_SECRET && 'EBAY_CLIENT_SECRET',
+      !CALLBACK_URL && 'EBAY_MARKETPLACE_DELETION_CALLBACK_URL',
+      !VERIFICATION_TOKEN && 'EBAY_MARKETPLACE_DELETION_VERIFICATION_TOKEN',
+    ].filter(Boolean);
+
     console.error(
-      'Missing required eBay notification configuration. ' +
-        'Ensure EBAY_CLIENT_ID, EBAY_CLIENT_SECRET, EBAY_MARKETPLACE_DELETION_CALLBACK_URL, ' +
-        'and EBAY_MARKETPLACE_DELETION_VERIFICATION_TOKEN are set.',
+      `Missing required eBay notification configuration. The following environment variables are not set: ${missingVars.join(', ')}`
     );
     return null;
   }
