@@ -79,12 +79,9 @@ export interface EbaySearchParams {
 export class EbayAdapter implements MarketplaceAdapter {
   private appId: string;
   private baseUrl: string;
-<<<<<<< Updated upstream
   private oauthToken?: string;
   private defaultMarketplaceId: string;
-=======
   private browseBaseUrl: string;
->>>>>>> Stashed changes
 
   constructor(appId: string, oauthToken?: string) {
     if (!appId) {
@@ -100,25 +97,17 @@ export class EbayAdapter implements MarketplaceAdapter {
 
     // Support both production and sandbox/staging environments.
     const environment = process.env.EBAY_ENVIRONMENT ?? 'production';
-<<<<<<< Updated upstream
     const isSandbox = environment === 'sandbox';
     this.baseUrl = isSandbox
       ? 'https://api.sandbox.ebay.com/buy/browse/v1'
       : 'https://api.ebay.com/buy/browse/v1';
 
+    // browseBaseUrl is the same as baseUrl for Browse API
+    this.browseBaseUrl = this.baseUrl;
+
     // Default marketplace ID (can be overridden in search params)
     this.defaultMarketplaceId =
       process.env.EBAY_MARKETPLACE_ID || 'EBAY_US';
-=======
-    this.baseUrl =
-      environment === 'sandbox'
-        ? 'https://svcs.sandbox.ebay.com/services/search/FindingService/v1'
-        : 'https://svcs.ebay.com/services/search/FindingService/v1';
-    this.browseBaseUrl =
-      environment === 'sandbox'
-        ? 'https://api.sandbox.ebay.com/buy/browse/v1'
-        : 'https://api.ebay.com/buy/browse/v1';
->>>>>>> Stashed changes
   }
 
   getMarketplace(): Marketplace {
@@ -265,10 +254,7 @@ export class EbayAdapter implements MarketplaceAdapter {
       updated_at: new Date(),
       first_seen_at: new Date(),
       last_seen_at: new Date(),
-<<<<<<< Updated upstream
       status: isActive ? 'active' : 'expired',
-=======
-      status: 'active',
       // Enrichment fields - will be populated by enrichment service
       enriched_at: null,
       enriched_raw_listing_id: null,
@@ -278,7 +264,6 @@ export class EbayAdapter implements MarketplaceAdapter {
       item_location: null,
       estimated_availabilities: null,
       buying_options: [],
->>>>>>> Stashed changes
     };
   }
 
@@ -288,8 +273,6 @@ export class EbayAdapter implements MarketplaceAdapter {
     // This is a placeholder
     return true;
   }
-<<<<<<< Updated upstream
-=======
 
   /**
    * Get detailed item information from eBay Browse API
@@ -306,15 +289,15 @@ export class EbayAdapter implements MarketplaceAdapter {
     const url = `${this.browseBaseUrl}/item/${encodeURIComponent(itemId)}`;
 
     try {
-      // eBay Browse API authentication
-      // Note: Browse API may require OAuth tokens for some operations
-      // For public item data, App ID authentication via header should work
+      // eBay Browse API authentication - requires OAuth Bearer token
+      const headers: HeadersInit = {
+        Authorization: `Bearer ${this.oauthToken}`,
+        'X-EBAY-C-MARKETPLACE-ID': this.defaultMarketplaceId,
+        'Accept': 'application/json',
+      };
+
       const response = await fetch(url, {
-        headers: {
-          'X-EBAY-SOA-SECURITY-APPNAME': this.appId,
-          'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US', // Default to US marketplace
-          'Accept': 'application/json',
-        },
+        headers,
       });
 
       if (!response.ok) {
@@ -359,5 +342,4 @@ export class EbayAdapter implements MarketplaceAdapter {
 
     return items;
   }
->>>>>>> Stashed changes
 }

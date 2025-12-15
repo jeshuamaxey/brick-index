@@ -33,6 +33,19 @@ export interface EbaySnapshotFile {
     code: string;
     message: string;
   };
+  /**
+   * Enriched item data from getItem API calls.
+   * Maps itemId -> getItem API response
+   */
+  enrichedItems?: Record<string, Record<string, unknown>>;
+  /**
+   * Metadata about enrichment process
+   */
+  enrichmentMetadata?: {
+    enrichedAt: string;
+    enrichedCount: number;
+    failedCount: number;
+  };
 }
 
 interface SnapshotIndexEntry {
