@@ -1,6 +1,7 @@
 // Service to enrich listings with detailed information from marketplace APIs
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { JobType } from '@/lib/types';
 import type { MarketplaceAdapter } from './marketplace-adapters/base-adapter';
 import { EbayAdapter } from './marketplace-adapters/ebay-adapter';
 
@@ -57,7 +58,7 @@ export class EnrichmentService {
     const jobId = crypto.randomUUID();
     
     // Determine job type based on marketplace
-    const jobType = `${marketplace}_enrich_listings` as const;
+    const jobType: JobType = `${marketplace}_enrich_listings` as JobType;
 
     // Check if adapter supports getItemDetails (currently only EbayAdapter)
     if (!('getItemDetails' in adapter)) {

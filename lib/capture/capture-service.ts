@@ -3,7 +3,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { MarketplaceAdapter } from './marketplace-adapters/base-adapter';
 import { DeduplicationService } from './deduplication-service';
-import type { Job, RawListing, Listing } from '@/lib/types';
+import type { Job, JobType, RawListing, Listing } from '@/lib/types';
 
 export class CaptureService {
   private deduplicationService: DeduplicationService;
@@ -28,7 +28,7 @@ export class CaptureService {
     const jobId = crypto.randomUUID();
     
     // Determine job type based on marketplace
-    const jobType = `${marketplace}_refresh_listings` as const;
+    const jobType: JobType = `${marketplace}_refresh_listings` as JobType;
 
     // Create job record
     const { data: job, error: jobError } = await this.supabase
