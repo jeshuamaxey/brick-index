@@ -232,7 +232,7 @@ describe('EbayAdapter.getItemDetails()', () => {
   });
 
   describe('browseBaseUrl initialization', () => {
-    it('initializes browseBaseUrl correctly in constructor', () => {
+    it('initializes browseBaseUrl correctly in constructor', async () => {
       process.env.EBAY_ENVIRONMENT = 'production';
       const adapter = new EbayAdapter(appId, oauthToken);
       
@@ -242,7 +242,7 @@ describe('EbayAdapter.getItemDetails()', () => {
         json: async () => ({}),
       });
 
-      adapter.getItemDetails('123');
+      await adapter.getItemDetails('123');
 
       const [url] = mockFetch.mock.calls[0];
       expect(url).toContain('api.ebay.com/buy/browse/v1/item');
