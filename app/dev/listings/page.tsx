@@ -47,18 +47,18 @@ export default function ListingsPage() {
   };
 
   if (loading) {
-    return <div className="p-8">Loading listings...</div>;
+    return <div className="p-8 bg-background text-foreground">Loading listings...</div>;
   }
 
   if (error) {
-    return <div className="p-8 text-red-600">Error: {error}</div>;
+    return <div className="p-8 bg-background text-foreground">Error: {error}</div>;
   }
 
   return (
-    <div className="p-8">
+    <div className="p-8 bg-background text-foreground">
       <h1 className="text-2xl font-bold mb-4">Captured Listings</h1>
       <DevNav />
-      <p className="mb-4 text-gray-600">
+      <p className="mb-4 text-foreground/70">
         Total: {listings.length} listings
       </p>
       <div className="space-y-4">
@@ -67,7 +67,7 @@ export default function ListingsPage() {
           return (
             <div
               key={listing.id}
-              className="border rounded-lg p-4 hover:shadow-md transition-shadow"
+              className="bg-background border border-foreground/10 rounded-lg p-4 hover:shadow-md transition-shadow"
             >
               <div className="flex justify-between items-start">
                 <div className="flex-1">
@@ -76,12 +76,12 @@ export default function ListingsPage() {
                       href={listing.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline"
+                      className="text-foreground hover:underline"
                     >
                       {listing.title}
                     </a>
                   </h2>
-                  <div className="text-sm text-gray-600 space-y-1">
+                  <div className="text-sm text-foreground/70 space-y-1">
                     <div>
                       <strong>Price:</strong>{' '}
                       {listing.price

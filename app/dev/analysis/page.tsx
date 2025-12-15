@@ -47,27 +47,27 @@ export default function AnalysisPage() {
   };
 
   if (loading) {
-    return <div className="p-8">Loading analyses...</div>;
+    return <div className="p-8 bg-background text-foreground">Loading analyses...</div>;
   }
 
   if (error) {
-    return <div className="p-8 text-red-600">Error: {error}</div>;
+    return <div className="p-8 bg-background text-foreground">Error: {error}</div>;
   }
 
   return (
-    <div className="p-8">
+    <div className="p-8 bg-background text-foreground">
       <h1 className="text-2xl font-bold mb-4">Analysis Results</h1>
       <DevNav />
-      <p className="mb-4 text-gray-600">
+      <p className="mb-4 text-foreground/70">
         Total: {analyses.length} analyzed listings
       </p>
       <div className="space-y-4">
         {analyses.map((analysis) => (
           <div
             key={analysis.id}
-            className="border rounded-lg p-4 hover:shadow-md transition-shadow"
+            className="bg-background border border-foreground/10 rounded-lg p-4 hover:shadow-md transition-shadow"
           >
-            <div className="space-y-2 text-sm">
+            <div className="space-y-2 text-sm text-foreground">
               <div>
                 <strong>Listing ID:</strong> {analysis.listing_id}
               </div>
@@ -75,14 +75,14 @@ export default function AnalysisPage() {
                 <strong>Pieces:</strong>{' '}
                 {analysis.piece_count ?? 'Unknown'}{' '}
                 {analysis.estimated_piece_count && (
-                  <span className="text-yellow-600">(estimated)</span>
+                  <span className="text-foreground/70">(estimated)</span>
                 )}
               </div>
               <div>
                 <strong>Minifigs:</strong>{' '}
                 {analysis.minifig_count ?? 'Unknown'}{' '}
                 {analysis.estimated_minifig_count && (
-                  <span className="text-yellow-600">(estimated)</span>
+                  <span className="text-foreground/70">(estimated)</span>
                 )}
               </div>
               <div>
