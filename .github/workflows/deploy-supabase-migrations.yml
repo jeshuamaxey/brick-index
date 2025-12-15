@@ -1,0 +1,44 @@
+name: Deploy Supabase migrations to production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy-migrations:
+    name: Push Supabase migrations
+    runs-on: ubuntu-latest
+
+    # Follows the pattern from Supabase "Managing environments" docs:
+    # https://supabase.com/docs/guides/deployment/managing-environments#configure-github-actions
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_ID: ${{ secrets.PRODUCTION_PROJECT_ID }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Verify migrations directory exists
+        run: |
+          if [ ! -d "supabase/migrations" ]; then
+            echo "supabase/migrations directory not found."
+            exit 1
+          fi
+
+      - name: Link to production project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_ID"
+
+      - name: Push migrations to production
+        run: |
+          # Apply all pending migrations from supabase/migrations to the linked production project
+          supabase db push --db-password "$SUPABASE_DB_PASSWORD"
+

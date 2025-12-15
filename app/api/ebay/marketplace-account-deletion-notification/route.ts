@@ -1,12 +1,60 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { supabaseServer } from '@/lib/supabase/server';
+import { EventNotificationSDK } from 'event-notification-nodejs-sdk';
 
 // Environment variables:
 // - EBAY_MARKETPLACE_DELETION_VERIFICATION_TOKEN: verification token configured in eBay Dev Portal
 // - EBAY_MARKETPLACE_DELETION_CALLBACK_URL: full HTTPS callback URL as configured in eBay Dev Portal
+// - EBAY_CLIENT_ID: eBay OAuth client ID
+// - EBAY_CLIENT_SECRET: eBay OAuth client secret
+// - EBAY_DEV_ID: (optional) eBay developer ID
+// - EBAY_REDIRECT_URI: (optional) eBay redirect URI for the app
+// - EBAY_ENVIRONMENT: 'production' (default) or 'sandbox'
 
 const VERIFICATION_TOKEN = process.env.EBAY_MARKETPLACE_DELETION_VERIFICATION_TOKEN;
 const CALLBACK_URL = process.env.EBAY_MARKETPLACE_DELETION_CALLBACK_URL;
+const EBAY_CLIENT_ID = process.env.EBAY_CLIENT_ID;
+const EBAY_CLIENT_SECRET = process.env.EBAY_CLIENT_SECRET;
+const EBAY_DEV_ID = process.env.EBAY_DEV_ID;
+const EBAY_REDIRECT_URI = process.env.EBAY_REDIRECT_URI;
+const EBAY_ENVIRONMENT = process.env.EBAY_ENVIRONMENT ?? 'production';
+
+type EbayNotificationSdk = {
+  verifyNotification: (req: unknown) => Promise<boolean>;
+};
+
+let ebayNotificationSdk: EbayNotificationSdk | null = null;
+
+function getEbayNotificationSdk(): EbayNotificationSdk | null {
+  if (ebayNotificationSdk) return ebayNotificationSdk;
+
+  if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET || !CALLBACK_URL || !VERIFICATION_TOKEN) {
+    console.error(
+      'Missing required eBay notification configuration. ' +
+        'Ensure EBAY_CLIENT_ID, EBAY_CLIENT_SECRET, EBAY_MARKETPLACE_DELETION_CALLBACK_URL, ' +
+        'and EBAY_MARKETPLACE_DELETION_VERIFICATION_TOKEN are set.',
+    );
+    return null;
+  }
+
+  const baseUrl =
+    EBAY_ENVIRONMENT === 'sandbox' ? 'api.sandbox.ebay.com' : 'api.ebay.com';
+
+  ebayNotificationSdk = new EventNotificationSDK({
+    PRODUCTION: {
+      clientId: EBAY_CLIENT_ID,
+      clientSecret: EBAY_CLIENT_SECRET,
+      devId: EBAY_DEV_ID ?? '',
+      redirectUri: EBAY_REDIRECT_URI ?? '',
+      baseUrl,
+    },
+    endpoint: CALLBACK_URL,
+    verificationToken: VERIFICATION_TOKEN,
+  } as unknown);
+
+  return ebayNotificationSdk;
+}
 
 /**
  * Handle eBay challenge request to validate the callback URL.
@@ -81,9 +129,20 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    const sdk = getEbayNotificationSdk();
     const signature = request.headers.get('x-ebay-signature') ?? undefined;
 
-    const body = await request.json().catch(() => null);
+    // Read raw body once so we can both verify the signature and parse JSON from it.
+    const rawBody = await request.text();
+
+    let body: unknown = null;
+    if (rawBody) {
+      try {
+        body = JSON.parse(rawBody);
+      } catch {
+        // Leave body as null; we'll handle below.
+      }
+    }
 
     if (!body || typeof body !== 'object') {
       // Still acknowledge per eBay requirements, but note the issue server-side
@@ -91,36 +150,118 @@ export async function POST(request: NextRequest) {
       return new Response(null, { status: 202 });
     }
 
+    // Verify signature before processing or persisting anything.
+    if (!signature) {
+      console.warn('Missing X-EBAY-SIGNATURE header on marketplace account deletion notification');
+      return new Response(null, { status: 412 });
+    }
+
+    if (!sdk) {
+      // If SDK is not configured correctly, do not accept the notification as valid.
+      // Respond with 500 so that eBay can retry while configuration is fixed.
+      return new Response(null, { status: 500 });
+    }
+
+    const fakeReq: { headers: Record<string, string>; body: unknown } = {
+      headers: Object.fromEntries(request.headers),
+      body,
+    };
+
+    let isValid = false;
+    try {
+      // SDK handles:
+      // 1. Decoding signature header
+      // 2. Retrieving public key via Notification API (with caching)
+      // 3. Verifying signature against payload
+      isValid = await sdk.verifyNotification(fakeReq);
+    } catch (err) {
+      console.error('Error during eBay notification signature verification:', err);
+      return new Response(null, { status: 412 });
+    }
+
+    if (!isValid) {
+      console.warn('eBay marketplace account deletion notification failed signature verification');
+      return new Response(null, { status: 412 });
+    }
+
     // Minimal shape from AsyncAPI spec in docs
-    const metadata = (body as any).metadata;
-    const notification = (body as any).notification;
+    const metadata = (body as { metadata?: unknown; notification?: unknown }).metadata as {
+      topic?: string;
+    } | undefined;
+    const notification = (body as {
+      notification?: {
+        notificationId?: string;
+        eventDate?: string;
+        publishDate?: string;
+        publishAttemptCount?: number;
+        data?: {
+          username?: string;
+          userId?: string;
+          eiasToken?: string;
+        };
+      };
+    }).notification;
     const data = notification?.data;
 
     const notificationId = notification?.notificationId;
     const topic = metadata?.topic;
 
+    const eventDate = notification?.eventDate ?? null;
+    const publishDate = notification?.publishDate ?? null;
+    const publishAttemptCount = notification?.publishAttemptCount ?? null;
+
     const username = data?.username;
     const userId = data?.userId;
     const eiasToken = data?.eiasToken;
 
-    // For now, log the deletion event; in production, this should:
-    // - Locate all records tied to this eBay user (by username/userId/eiasToken)
-    // - Delete or irreversibly anonymize data as per your data retention policies
-    // - Ensure deletions are not reversible even with highest privileges
-    console.info('eBay marketplace account deletion notification received', {
+    if (!notificationId) {
+      // According to the eBay schema, notificationId should always be present.
+      // If it's missing, don't attempt to persist (PK would fail) but still acknowledge.
+      console.error(
+        'Verified eBay marketplace account deletion notification is missing notificationId; skipping persistence.',
+      );
+      return new Response(null, { status: 202 });
+    }
+
+    // Persist the verified notification to Supabase.
+    try {
+      const { error } = await supabaseServer
+        .from('ebay_marketplace_account_deletion_notifications')
+        .insert({
+          topic,
+          notification_id: notificationId ?? null,
+          event_date: eventDate ? new Date(eventDate) : null,
+          publish_date: publishDate ? new Date(publishDate) : null,
+          publish_attempt_count: publishAttemptCount,
+          username: username ?? null,
+          user_id: userId ?? null,
+          eias_token: eiasToken ?? null,
+          signature,
+          verified: true,
+          raw_payload: body,
+        });
+
+      if (error) {
+        console.error(
+          'Failed to insert eBay marketplace account deletion notification into Supabase:',
+          error,
+        );
+      }
+    } catch (dbError) {
+      console.error(
+        'Unexpected error while inserting eBay marketplace account deletion notification into Supabase:',
+        dbError,
+      );
+    }
+
+    // Log for operational visibility
+    console.info('eBay marketplace account deletion notification stored', {
       topic,
       notificationId,
       username,
       userId,
       eiasToken,
-      hasSignature: Boolean(signature),
     });
-
-    // TODO: Implement signature verification according to eBay docs:
-    // https://developer.ebay.com/develop/guides-v2/marketplace-user-account-deletion/marketplace-user-account-deletion#overview
-    // - Decode x-ebay-signature
-    // - Fetch and cache public key using Notification API getPublicKey
-    // - Verify signature against payload, respond 412 if verification fails
 
     // Acknowledge receipt as required by eBay
     return new Response(null, { status: 202 });
