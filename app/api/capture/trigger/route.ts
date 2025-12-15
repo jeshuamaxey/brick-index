@@ -3,12 +3,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase/client';
 import { CaptureService } from '@/lib/capture/capture-service';
-import { EbayAdapter } from '@/lib/capture/marketplace-adapters/ebay-adapter';
+import { EbayAdapter, type EbaySearchParams } from '@/lib/capture/marketplace-adapters/ebay-adapter';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { marketplace = 'ebay', keywords } = body;
+    const {
+      marketplace = 'ebay',
+      keywords,
+      ebayParams,
+    }: {
+      marketplace?: string;
+      keywords?: string[];
+      ebayParams?: EbaySearchParams;
+    } = body;
 
     // Create adapter based on marketplace
     let adapter;
@@ -33,9 +41,12 @@ export async function POST(request: NextRequest) {
     // Create capture service and run capture
     const captureService = new CaptureService(supabase);
     const searchKeywords = keywords || ['lego bulk', 'lego job lot', 'lego lot'];
+    
+    // Pass eBay-specific params if provided
     const result = await captureService.captureFromMarketplace(
       adapter,
-      searchKeywords
+      searchKeywords,
+      ebayParams
     );
 
     return NextResponse.json(result);

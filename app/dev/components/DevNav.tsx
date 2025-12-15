@@ -10,6 +10,7 @@ const navItems = [
   { href: '/dev/analysis', label: 'Analysis' },
   { href: '/dev/capture', label: 'Capture' },
   { href: '/dev/seed', label: 'Seed' },
+  { href: '/dev/aggregate', label: 'Aggregate' },
 ];
 
 export default function DevNav() {

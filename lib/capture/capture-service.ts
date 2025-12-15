@@ -16,11 +16,13 @@ export class CaptureService {
    * Capture listings from a marketplace adapter
    * @param adapter - The marketplace adapter to use
    * @param keywords - Keywords to search for
+   * @param adapterParams - Optional adapter-specific parameters
    * @returns Capture job result
    */
   async captureFromMarketplace(
     adapter: MarketplaceAdapter,
-    keywords: string[] = ['lego bulk', 'lego job lot', 'lego lot']
+    keywords: string[] = ['lego bulk', 'lego job lot', 'lego lot'],
+    adapterParams?: unknown
   ): Promise<CaptureJob> {
     const marketplace = adapter.getMarketplace();
     const jobId = crypto.randomUUID();
@@ -61,7 +63,21 @@ export class CaptureService {
 
     try {
       // Search for listings
-      const rawResponses = await adapter.searchListings(keywords);
+      // Check if adapter supports optional params (e.g., EbayAdapter)
+      let rawResponses: Record<string, unknown>[];
+      if (
+        adapterParams &&
+        'searchListings' in adapter &&
+        adapter.searchListings.length > 1
+      ) {
+        // Type assertion for adapters that support optional params
+        rawResponses = await (adapter.searchListings as (
+          keywords: string[],
+          params?: unknown
+        ) => Promise<Record<string, unknown>[]>)(keywords, adapterParams);
+      } else {
+        rawResponses = await adapter.searchListings(keywords);
+      }
       const listingsFound = rawResponses.length;
 
       // Store raw responses

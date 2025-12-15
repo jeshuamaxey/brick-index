@@ -17,15 +17,71 @@ interface CaptureJob {
   error_message: string | null;
 }
 
+interface EbaySearchParams {
+  entriesPerPage?: number;
+  listingTypes?: string[];
+  hideDuplicateItems?: boolean;
+  categoryId?: string;
+}
+
 export default function CapturePage() {
   const [loading, setLoading] = useState(false);
   const [job, setJob] = useState<CaptureJob | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Form state with default values (current hardcoded values)
+  const [keywords, setKeywords] = useState('lego bulk, lego job lot, lego lot');
+  const [entriesPerPage, setEntriesPerPage] = useState('100');
+  const [useEntriesPerPage, setUseEntriesPerPage] = useState(true);
+  
+  const [listingTypeAuction, setListingTypeAuction] = useState(true);
+  const [listingTypeFixed, setListingTypeFixed] = useState(true);
+  const [useListingTypes, setUseListingTypes] = useState(true);
+  
+  const [hideDuplicates, setHideDuplicates] = useState(true);
+  const [useHideDuplicates, setUseHideDuplicates] = useState(true);
+  
+  const [categoryId, setCategoryId] = useState('220');
+  const [useCategoryId, setUseCategoryId] = useState(true);
+
   const triggerCapture = async () => {
     try {
       setLoading(true);
       setError(null);
+
+      // Parse keywords
+      const keywordArray = keywords
+        .split(',')
+        .map((k) => k.trim())
+        .filter((k) => k.length > 0);
+
+      // Build eBay params object
+      const ebayParams: EbaySearchParams = {};
+
+      if (useEntriesPerPage && entriesPerPage) {
+        const entries = parseInt(entriesPerPage, 10);
+        if (!isNaN(entries) && entries > 0) {
+          ebayParams.entriesPerPage = entries;
+        }
+      }
+
+      if (useListingTypes) {
+        const types: string[] = [];
+        if (listingTypeAuction) types.push('AuctionWithBIN');
+        if (listingTypeFixed) types.push('FixedPrice');
+        if (types.length > 0) {
+          ebayParams.listingTypes = types;
+        }
+      }
+
+      if (useHideDuplicates) {
+        ebayParams.hideDuplicateItems = hideDuplicates;
+      }
+
+      if (useCategoryId && categoryId) {
+        ebayParams.categoryId = categoryId;
+      }
+
       const response = await fetch('/api/capture/trigger', {
         method: 'POST',
         headers: {
@@ -33,7 +89,8 @@ export default function CapturePage() {
         },
         body: JSON.stringify({
           marketplace: 'ebay',
-          keywords: ['lego bulk', 'lego job lot', 'lego lot'],
+          keywords: keywordArray,
+          ebayParams: Object.keys(ebayParams).length > 0 ? ebayParams : undefined,
         }),
       });
 
@@ -112,13 +169,139 @@ export default function CapturePage() {
         </p>
       </div>
 
-      <button
-        onClick={triggerCapture}
-        disabled={loading}
-        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {loading ? 'Triggering...' : 'Trigger Capture'}
-      </button>
+      <div className="mt-6 p-6 bg-white rounded-lg border">
+        <h2 className="text-lg font-semibold mb-4">Search Configuration</h2>
+
+        <div className="space-y-4">
+          {/* Keywords */}
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Keywords (comma-separated)
+            </label>
+            <input
+              type="text"
+              value={keywords}
+              onChange={(e) => setKeywords(e.target.value)}
+              className="w-full px-3 py-2 border rounded"
+              placeholder="lego bulk, lego job lot, lego lot"
+            />
+          </div>
+
+          {/* Entries Per Page */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <input
+                type="checkbox"
+                checked={useEntriesPerPage}
+                onChange={(e) => setUseEntriesPerPage(e.target.checked)}
+                className="rounded"
+              />
+              <label className="text-sm font-medium">
+                Entries Per Page
+              </label>
+            </div>
+            {useEntriesPerPage && (
+              <input
+                type="number"
+                value={entriesPerPage}
+                onChange={(e) => setEntriesPerPage(e.target.value)}
+                className="w-full px-3 py-2 border rounded"
+                min="1"
+                max="100"
+              />
+            )}
+          </div>
+
+          {/* Listing Types */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <input
+                type="checkbox"
+                checked={useListingTypes}
+                onChange={(e) => setUseListingTypes(e.target.checked)}
+                className="rounded"
+              />
+              <label className="text-sm font-medium">Listing Types</label>
+            </div>
+            {useListingTypes && (
+              <div className="ml-6 space-y-2">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={listingTypeAuction}
+                    onChange={(e) => setListingTypeAuction(e.target.checked)}
+                    className="rounded"
+                  />
+                  <span className="text-sm">AuctionWithBIN</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={listingTypeFixed}
+                    onChange={(e) => setListingTypeFixed(e.target.checked)}
+                    className="rounded"
+                  />
+                  <span className="text-sm">FixedPrice</span>
+                </label>
+              </div>
+            )}
+          </div>
+
+          {/* Hide Duplicates */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <input
+                type="checkbox"
+                checked={useHideDuplicates}
+                onChange={(e) => setUseHideDuplicates(e.target.checked)}
+                className="rounded"
+              />
+              <label className="text-sm font-medium">Hide Duplicate Items</label>
+            </div>
+            {useHideDuplicates && (
+              <label className="flex items-center gap-2 ml-6">
+                <input
+                  type="checkbox"
+                  checked={hideDuplicates}
+                  onChange={(e) => setHideDuplicates(e.target.checked)}
+                  className="rounded"
+                />
+                <span className="text-sm">Enabled</span>
+              </label>
+            )}
+          </div>
+
+          {/* Category ID */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <input
+                type="checkbox"
+                checked={useCategoryId}
+                onChange={(e) => setUseCategoryId(e.target.checked)}
+                className="rounded"
+              />
+              <label className="text-sm font-medium">Category ID</label>
+            </div>
+            {useCategoryId && (
+              <input
+                type="text"
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value)}
+                className="w-full px-3 py-2 border rounded"
+                placeholder="220 (LEGO category)"
+              />
+            )}
+          </div>
+        </div>
+
+        <button
+          onClick={triggerCapture}
+          disabled={loading}
+          className="mt-6 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {loading ? 'Triggering...' : 'Trigger Capture'}
+        </button>
+      </div>
 
       {error && (
         <div className="mt-4 p-4 bg-red-100 text-red-700 rounded">

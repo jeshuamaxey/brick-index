@@ -99,22 +99,41 @@ interface EbayItem {
   description?: string[];
 }
 
+export interface EbaySearchParams {
+  entriesPerPage?: number;
+  listingTypes?: string[]; // e.g., ['AuctionWithBIN', 'FixedPrice']
+  hideDuplicateItems?: boolean;
+  categoryId?: string;
+}
+
 export class EbayAdapter implements MarketplaceAdapter {
   private appId: string;
-  private baseUrl = 'https://svcs.ebay.com/services/search/FindingService/v1';
+  private baseUrl: string;
 
   constructor(appId: string) {
     if (!appId) {
       throw new Error('eBay App ID is required');
     }
     this.appId = appId;
+
+    // Support both production and sandbox/staging environments.
+    // If you're using an eBay *sandbox* App ID, set EBAY_ENVIRONMENT=sandbox
+    // so we hit the correct endpoint instead of production.
+    const environment = process.env.EBAY_ENVIRONMENT ?? 'production';
+    this.baseUrl =
+      environment === 'sandbox'
+        ? 'https://svcs.sandbox.ebay.com/services/search/FindingService/v1'
+        : 'https://svcs.ebay.com/services/search/FindingService/v1';
   }
 
   getMarketplace(): Marketplace {
     return 'ebay';
   }
 
-  async searchListings(keywords: string[]): Promise<Record<string, unknown>[]> {
+  async searchListings(
+    keywords: string[],
+    params?: EbaySearchParams
+  ): Promise<Record<string, unknown>[]> {
     const keywordQuery = keywords.join(' ');
     const url = new URL(this.baseUrl);
     url.searchParams.set('OPERATION-NAME', 'findItemsByKeywords');
@@ -123,14 +142,47 @@ export class EbayAdapter implements MarketplaceAdapter {
     url.searchParams.set('RESPONSE-DATA-FORMAT', 'JSON');
     url.searchParams.set('REST-PAYLOAD', '');
     url.searchParams.set('keywords', keywordQuery);
-    url.searchParams.set('paginationInput.entriesPerPage', '100');
-    url.searchParams.set('itemFilter(0).name', 'ListingType');
-    url.searchParams.set('itemFilter(0).value(0)', 'AuctionWithBIN');
-    url.searchParams.set('itemFilter(0).value(1)', 'FixedPrice');
-    url.searchParams.set('itemFilter(1).name', 'HideDuplicateItems');
-    url.searchParams.set('itemFilter(1).value', 'true');
-    // Search in Toys & Hobbies > Building Toys > LEGO category (category ID 220)
-    url.searchParams.set('categoryId', '220');
+
+    // Apply optional parameters
+    let filterIndex = 0;
+
+    // Entries per page
+    if (params?.entriesPerPage !== undefined) {
+      url.searchParams.set(
+        'paginationInput.entriesPerPage',
+        params.entriesPerPage.toString()
+      );
+    }
+
+    // Listing types filter
+    if (params?.listingTypes && params.listingTypes.length > 0) {
+      url.searchParams.set(`itemFilter(${filterIndex}).name`, 'ListingType');
+      params.listingTypes.forEach((type, idx) => {
+        url.searchParams.set(
+          `itemFilter(${filterIndex}).value(${idx})`,
+          type
+        );
+      });
+      filterIndex++;
+    }
+
+    // Hide duplicate items filter
+    if (params?.hideDuplicateItems !== undefined) {
+      url.searchParams.set(
+        `itemFilter(${filterIndex}).name`,
+        'HideDuplicateItems'
+      );
+      url.searchParams.set(
+        `itemFilter(${filterIndex}).value`,
+        params.hideDuplicateItems.toString()
+      );
+      filterIndex++;
+    }
+
+    // Category ID
+    if (params?.categoryId !== undefined) {
+      url.searchParams.set('categoryId', params.categoryId);
+    }
 
     try {
       const response = await fetch(url.toString());
@@ -203,7 +255,7 @@ export class EbayAdapter implements MarketplaceAdapter {
     };
   }
 
-  async isListingActive(externalId: string): Promise<boolean> {
+  async isListingActive(_externalId: string): Promise<boolean> {
     // For now, we'll assume listings are active if they exist
     // In a full implementation, we'd call GetSingleItem to check status
     // This is a placeholder
