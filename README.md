@@ -76,7 +76,7 @@ All data related to the capture and analysis pipeline:
 - `raw_listings`: Raw API responses (ground truth)
 - `listings`: Structured listing data
 - `listing_analysis`: Extracted attributes (piece count, minifigs, etc.)
-- `capture_jobs`: Capture job logs
+- `jobs`: Job tracking for async operations (capture, enrichment, etc.)
 
 ### `public` Schema (End User Application Data)
 All data related to user-facing features:
@@ -89,8 +89,9 @@ All data related to user-facing features:
 ### Capture
 
 - `POST /api/capture/trigger` - Trigger a capture job
-- `GET /api/capture/status/[jobId]` - Get capture job status
+- `GET /api/capture/status/[jobId]` - Get job status
 - `POST /api/capture/enrich` - Trigger enrichment process for unenriched listings
+- `GET /api/jobs` - Get all jobs (with optional filtering)
 
 ### Analysis
 
@@ -112,6 +113,7 @@ Access dev pages at:
 - `/dev/listings` - View captured listings
 - `/dev/analysis` - View analysis results
 - `/dev/capture` - Trigger capture jobs
+- `/dev/jobs` - View all jobs and their status
 
 ## Testing
 
