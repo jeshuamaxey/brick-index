@@ -1,6 +1,8 @@
 {
   "setup-worktree": [
     "cp /Users/jeshua/dev/bricks/.env.local .env.local",
-    "npm install"
+    "cp -r /Users/jeshua/dev/bricks/data data",
+    "npm install",
+    "npm run seed:load-ebay-snapshot-into-supabase"
   ]
 }
