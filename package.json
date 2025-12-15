@@ -9,7 +9,10 @@
     "lint": "eslint",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest --coverage"
+    "test:coverage": "vitest --coverage",
+    "seed:fetch-ebay-snapshot": "tsx scripts/fetch-ebay-snapshot.ts",
+    "seed:load-ebay-snapshot-into-supabase": "tsx scripts/load-ebay-snapshot-into-supabase.ts",
+    "seed:delete-ebay-snapshots": "tsx scripts/delete-ebay-snapshots.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
@@ -33,6 +36,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^17.2.3",
     "eslint": "^9",
     "eslint-config-next": "16.0.10",
     "tailwindcss": "^4",

@@ -181,12 +181,22 @@ export async function POST(request: NextRequest) {
       console.info('[eBay Deletion] EventNotificationSDK.process responseCode:', responseCode);
     } catch (err) {
       console.error('Error during eBay notification signature verification:', err);
-      return new Response(null, { status: 412 });
+      // Treat SDK errors as internal failures so eBay can retry.
+      return new Response(null, { status: 500 });
     }
     // Per SDK example, NO_CONTENT (204) == success, PRECONDITION_FAILED (412) == bad signature.
-    if (responseCode === 412) {
-      console.warn('eBay marketplace account deletion notification failed signature verification');
-      return new Response(null, { status: 412 });
+    if (responseCode !== 204) {
+      if (responseCode === 412) {
+        console.warn(
+          'eBay marketplace account deletion notification failed signature verification (412)',
+        );
+      } else {
+        console.error(
+          '[eBay Deletion] EventNotificationSDK.process returned non-success status; not persisting notification',
+        );
+      }
+      // Return the SDK's HTTP status code back to eBay unchanged.
+      return new Response(null, { status: responseCode });
     }
 
     // Minimal shape from AsyncAPI spec in docs
@@ -264,11 +274,20 @@ export async function POST(request: NextRequest) {
           'Failed to insert eBay marketplace account deletion notification into Supabase:',
           error,
         );
+        // Do not log as stored if persistence failed.
       } else {
         console.info(
           '[eBay Deletion] Successfully inserted notification into Supabase',
           notificationId,
         );
+        // Log for operational visibility only when persistence succeeded.
+        console.info('eBay marketplace account deletion notification stored', {
+          topic,
+          notificationId,
+          username,
+          userId,
+          eiasToken,
+        });
       }
     } catch (dbError) {
       console.error(
@@ -276,15 +295,6 @@ export async function POST(request: NextRequest) {
         dbError,
       );
     }
-
-    // Log for operational visibility
-    console.info('eBay marketplace account deletion notification stored', {
-      topic,
-      notificationId,
-      username,
-      userId,
-      eiasToken,
-    });
 
     // Acknowledge receipt as required by eBay
     return new Response(null, { status: 202 });
