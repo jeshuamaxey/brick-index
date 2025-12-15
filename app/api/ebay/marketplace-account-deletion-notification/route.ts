@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase/server';
 import * as EventNotificationSDK from 'event-notification-nodejs-sdk';
+import { processEbayNotification } from '@/lib/ebay/notification-verifier';
 
 // Environment variables:
 // - EBAY_MARKETPLACE_DELETION_VERIFICATION_TOKEN: verification token configured in eBay Dev Portal
@@ -170,55 +171,77 @@ export async function POST(request: NextRequest) {
     }
 
     let responseCode: number;
-    try {
-      console.info('[eBay Deletion] Calling EventNotificationSDK.process');
-      responseCode = await EventNotificationSDK.process(
+
+    const useCustomVerifier =
+      process.env.EBAY_USE_CUSTOM_VERIFIER === 'true' ||
+      process.env.EBAY_USE_CUSTOM_VERIFIER === '1';
+
+    if (useCustomVerifier) {
+      console.info('[eBay Deletion] Using custom notification verifier');
+      responseCode = await processEbayNotification(
         body,
         signature,
         config,
         getEnvironmentKey(),
       );
-      console.info('[eBay Deletion] EventNotificationSDK.process responseCode:', responseCode);
-    } catch (err) {
-      // The SDK uses axios under the hood. When calls to eBay fail (e.g. 401),
-      // the error object typically has isAxiosError, config, request, and response.
-      const anyErr = err as {
-        message?: string;
-        code?: string;
-        isAxiosError?: boolean;
-        response?: {
-          status?: number;
-          statusText?: string;
-          data?: unknown;
-          headers?: unknown;
+      console.info(
+        '[eBay Deletion] Custom verifier processEbayNotification responseCode:',
+        responseCode,
+      );
+    } else {
+      try {
+        console.info('[eBay Deletion] Calling EventNotificationSDK.process');
+        responseCode = await EventNotificationSDK.process(
+          body,
+          signature,
+          config,
+          getEnvironmentKey(),
+        );
+        console.info('[eBay Deletion] EventNotificationSDK.process responseCode:', responseCode);
+      } catch (err) {
+        // The SDK uses axios under the hood. When calls to eBay fail (e.g. 401),
+        // the error object typically has isAxiosError, config, request, and response.
+        const anyErr = err as {
+          message?: string;
+          code?: string;
+          isAxiosError?: boolean;
+          response?: {
+            status?: number;
+            statusText?: string;
+            data?: unknown;
+            headers?: unknown;
+          };
+          config?: {
+            url?: string;
+            method?: string;
+            headers?: unknown;
+            data?: unknown;
+          };
         };
-        config?: {
-          url?: string;
-          method?: string;
-          headers?: unknown;
-          data?: unknown;
-        };
-      };
 
-      console.error('Error during eBay notification signature verification:', err);
+        console.error('Error during eBay notification signature verification:', err);
 
-      if (anyErr.isAxiosError) {
-        console.error('[eBay Deletion] Axios error details when calling eBay Notification API', {
-          message: anyErr.message,
-          code: anyErr.code,
-          status: anyErr.response?.status,
-          statusText: anyErr.response?.statusText,
-          responseData: anyErr.response?.data,
-          responseHeaders: anyErr.response?.headers,
-          requestUrl: anyErr.config?.url,
-          requestMethod: anyErr.config?.method,
-          requestHeaders: anyErr.config?.headers,
-          requestBody: anyErr.config?.data,
-        });
+        if (anyErr.isAxiosError) {
+          console.error(
+            '[eBay Deletion] Axios error details when calling eBay Notification API',
+            {
+              message: anyErr.message,
+              code: anyErr.code,
+              status: anyErr.response?.status,
+              statusText: anyErr.response?.statusText,
+              responseData: anyErr.response?.data,
+              responseHeaders: anyErr.response?.headers,
+              requestUrl: anyErr.config?.url,
+              requestMethod: anyErr.config?.method,
+              requestHeaders: anyErr.config?.headers,
+              requestBody: anyErr.config?.data,
+            },
+          );
+        }
+
+        // Treat SDK errors as internal failures so eBay can retry.
+        return new Response(null, { status: 500 });
       }
-
-      // Treat SDK errors as internal failures so eBay can retry.
-      return new Response(null, { status: 500 });
     }
     // Per SDK example, NO_CONTENT (204) == success, PRECONDITION_FAILED (412) == bad signature.
     if (responseCode !== 204) {
