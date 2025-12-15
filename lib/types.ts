@@ -32,6 +32,15 @@ export interface Listing {
   first_seen_at: Date;
   last_seen_at: Date;
   status: ListingStatus;
+  // Enrichment fields from getItem API
+  enriched_at: Date | null;
+  enriched_raw_listing_id: string | null;
+  additional_images: string[];
+  condition_description: string | null;
+  category_path: string | null;
+  item_location: Record<string, unknown> | null;
+  estimated_availabilities: Record<string, unknown> | null;
+  buying_options: string[];
 }
 
 export interface ListingAnalysis {

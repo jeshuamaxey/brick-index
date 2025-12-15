@@ -81,6 +81,7 @@ export class EbayAdapter implements MarketplaceAdapter {
   private baseUrl: string;
   private oauthToken?: string;
   private defaultMarketplaceId: string;
+  private browseBaseUrl: string;
 
   constructor(appId: string, oauthToken?: string) {
     if (!appId) {
@@ -100,6 +101,9 @@ export class EbayAdapter implements MarketplaceAdapter {
     this.baseUrl = isSandbox
       ? 'https://api.sandbox.ebay.com/buy/browse/v1'
       : 'https://api.ebay.com/buy/browse/v1';
+
+    // browseBaseUrl is the same as baseUrl for Browse API
+    this.browseBaseUrl = this.baseUrl;
 
     // Default marketplace ID (can be overridden in search params)
     this.defaultMarketplaceId =
@@ -251,6 +255,15 @@ export class EbayAdapter implements MarketplaceAdapter {
       first_seen_at: new Date(),
       last_seen_at: new Date(),
       status: isActive ? 'active' : 'expired',
+      // Enrichment fields - will be populated by enrichment service
+      enriched_at: null,
+      enriched_raw_listing_id: null,
+      additional_images: [],
+      condition_description: null,
+      category_path: null,
+      item_location: null,
+      estimated_availabilities: null,
+      buying_options: [],
     };
   }
 
@@ -259,5 +272,55 @@ export class EbayAdapter implements MarketplaceAdapter {
     // In a full implementation, we'd call the Browse API getItem endpoint to check status
     // This is a placeholder
     return true;
+  }
+
+  /**
+   * Get detailed item information from eBay Browse API
+   * @param itemId - The eBay item ID (legacy format is accepted)
+   * @returns Raw API response from getItem endpoint
+   */
+  async getItemDetails(itemId: string): Promise<Record<string, unknown>> {
+    if (!itemId) {
+      throw new Error('Item ID is required');
+    }
+
+    // The Browse API accepts both RESTful format (v1|...) and legacy format
+    // Since we get legacy IDs from the search API, we can use them directly
+    const url = `${this.browseBaseUrl}/item/${encodeURIComponent(itemId)}`;
+
+    try {
+      // eBay Browse API authentication - requires OAuth Bearer token
+      const headers: HeadersInit = {
+        Authorization: `Bearer ${this.oauthToken}`,
+        'X-EBAY-C-MARKETPLACE-ID': this.defaultMarketplaceId,
+        'Accept': 'application/json',
+      };
+
+      const response = await fetch(url, {
+        headers,
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error(`Item not found: ${itemId}`);
+        }
+        if (response.status === 429) {
+          throw new Error('Rate limit exceeded. Please retry after delay.');
+        }
+        const errorText = await response.text();
+        throw new Error(
+          `eBay Browse API error: ${response.status} ${response.statusText}. ${errorText}`
+        );
+      }
+
+      const data = await response.json();
+      return data as Record<string, unknown>;
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error(`Error fetching eBay item details for ${itemId}:`, error.message);
+        throw error;
+      }
+      throw new Error(`Unknown error fetching item details for ${itemId}`);
+    }
   }
 }

@@ -136,6 +136,87 @@ async function selectSnapshots(
   return Array.from(byProfile.values());
 }
 
+/**
+ * Extract enrichment fields from eBay getItem API response
+ */
+function extractEnrichmentFields(
+  response: Record<string, unknown>
+): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+
+  // Description
+  if (response.description !== undefined) {
+    fields.description = response.description;
+  }
+
+  // Additional images
+  if (
+    response.additionalImages &&
+    Array.isArray(response.additionalImages)
+  ) {
+    fields.additional_images = (response.additionalImages as Array<{ imageUrl?: string }>)
+      .map((img) => img.imageUrl)
+      .filter((url): url is string => typeof url === 'string');
+  } else {
+    fields.additional_images = [];
+  }
+
+  // Condition description
+  if (response.conditionDescription !== undefined) {
+    fields.condition_description = response.conditionDescription;
+  }
+
+  // Category path
+  if (response.categoryPath !== undefined) {
+    fields.category_path = response.categoryPath;
+  }
+
+  // Item location
+  if (response.itemLocation) {
+    const location = response.itemLocation as {
+      city?: string;
+      stateOrProvince?: string;
+      postalCode?: string;
+      country?: string;
+    };
+    fields.item_location = {
+      city: location.city,
+      stateOrProvince: location.stateOrProvince,
+      postalCode: location.postalCode,
+      country: location.country,
+    };
+  }
+
+  // Estimated availabilities
+  if (
+    response.estimatedAvailabilities &&
+    Array.isArray(response.estimatedAvailabilities)
+  ) {
+    fields.estimated_availabilities = (
+      response.estimatedAvailabilities as Array<{
+        estimatedAvailabilityStatus?: string;
+        estimatedAvailableQuantity?: number;
+        estimatedSoldQuantity?: number;
+        estimatedRemainingQuantity?: number;
+      }>
+    ).map((avail) => ({
+      estimatedAvailabilityStatus: avail.estimatedAvailabilityStatus,
+      estimatedAvailableQuantity: avail.estimatedAvailableQuantity,
+      estimatedSoldQuantity: avail.estimatedSoldQuantity,
+      estimatedRemainingQuantity: avail.estimatedRemainingQuantity,
+    }));
+  }
+
+  // Buying options
+  if (response.buyingOptions && Array.isArray(response.buyingOptions)) {
+    fields.buying_options = response.buyingOptions;
+  } else {
+    fields.buying_options = [];
+  }
+
+  return fields;
+}
+
 async function main() {
   // Dynamic imports after env vars are loaded
   const { supabaseServer } = await import('../lib/supabase/server.js');
@@ -179,15 +260,111 @@ async function main() {
       // We ignore the keywords here; the snapshot adapter will return the cached items.
       const result = await captureService.captureFromMarketplace(adapter, []);
 
+      // Load enriched data if available
+      let enrichedCount = 0;
+      const snapshotRaw = await fs.readFile(snapshotPath, 'utf8');
+      const snapshot = JSON.parse(snapshotRaw) as EbaySnapshotFile;
+
+      if (snapshot.enrichedItems && Object.keys(snapshot.enrichedItems).length > 0) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `  Loading enriched data for ${Object.keys(snapshot.enrichedItems).length} items...`
+        );
+
+        // Get all listings that were just created/updated
+        const { data: listings, error: listingsError } = await supabaseServer
+          .schema('pipeline')
+          .from('listings')
+          .select('id, external_id')
+          .eq('marketplace', 'ebay')
+          .in('external_id', Object.keys(snapshot.enrichedItems));
+
+        if (listingsError) {
+          // eslint-disable-next-line no-console
+          console.warn(`  Warning: Failed to query listings: ${listingsError.message}`);
+        } else if (listings) {
+          // Create a map of external_id -> listing_id
+          const externalIdToListingId = new Map<string, string>();
+          for (const listing of listings) {
+            externalIdToListingId.set(listing.external_id, listing.id);
+          }
+
+          // Process each enriched item
+          for (const [itemId, enrichedResponse] of Object.entries(
+            snapshot.enrichedItems
+          )) {
+            const listingId = externalIdToListingId.get(itemId);
+            if (!listingId) {
+              // Listing not found, skip
+              continue;
+            }
+
+            try {
+              // Store raw enriched response
+              const { data: rawListing, error: rawError } = await supabaseServer
+                .schema('pipeline')
+                .from('raw_listings')
+                .insert({
+                  marketplace: 'ebay',
+                  api_response: enrichedResponse,
+                })
+                .select('id')
+                .single();
+
+              if (rawError || !rawListing) {
+                // eslint-disable-next-line no-console
+                console.warn(
+                  `  Warning: Failed to store enriched raw listing for ${itemId}: ${rawError?.message || 'No ID returned'}`
+                );
+                continue;
+              }
+
+              // Extract enrichment fields
+              const extractedFields = extractEnrichmentFields(
+                enrichedResponse as Record<string, unknown>
+              );
+
+              // Update listing with enriched data
+              const { error: updateError } = await supabaseServer
+                .schema('pipeline')
+                .from('listings')
+                .update({
+                  ...extractedFields,
+                  enriched_at: new Date().toISOString(),
+                  enriched_raw_listing_id: rawListing.id,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', listingId);
+
+              if (updateError) {
+                // eslint-disable-next-line no-console
+                console.warn(
+                  `  Warning: Failed to update listing ${listingId}: ${updateError.message}`
+                );
+              } else {
+                enrichedCount++;
+              }
+            } catch (error) {
+              // eslint-disable-next-line no-console
+              console.warn(
+                `  Warning: Error processing enriched item ${itemId}:`,
+                error instanceof Error ? error.message : error
+              );
+            }
+          }
+        }
+      }
+
       results.push({
         file: snapshotEntry.file,
         profile: snapshotEntry.profile,
         result,
+        enrichedCount,
       });
 
       // eslint-disable-next-line no-console
       console.log(
-        `  ✓ ${snapshotEntry.profile}: ${result.listings_new} new, ${result.listings_updated} updated, ${result.listings_found} total`
+        `  ✓ ${snapshotEntry.profile}: ${result.listings_new} new, ${result.listings_updated} updated, ${result.listings_found} total${enrichedCount > 0 ? `, ${enrichedCount} enriched` : ''}`
       );
     } catch (error) {
       // eslint-disable-next-line no-console
