@@ -5,16 +5,18 @@
 import { useState } from 'react';
 import DevNav from '../components/DevNav';
 
-interface CaptureJob {
+interface Job {
   id: string;
+  type: string;
   marketplace: string;
-  status: string;
+  status: 'running' | 'completed' | 'failed';
   listings_found: number;
   listings_new: number;
   listings_updated: number;
   started_at: string;
   completed_at: string | null;
   error_message: string | null;
+  metadata?: Record<string, unknown>;
 }
 
 interface EbaySearchParams {
@@ -26,7 +28,7 @@ interface EbaySearchParams {
 
 export default function CapturePage() {
   const [loading, setLoading] = useState(false);
-  const [job, setJob] = useState<CaptureJob | null>(null);
+  const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Form state with default values (current hardcoded values)

@@ -1,4 +1,4 @@
-// API route to get capture job status
+// API route to get job status
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase/client';
@@ -12,7 +12,7 @@ export async function GET(
 
     const { data, error } = await supabase
       .schema('pipeline')
-      .from('capture_jobs')
+      .from('jobs')
       .select('*')
       .eq('id', jobId)
       .single();
@@ -26,7 +26,7 @@ export async function GET(
 
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Error fetching capture job status:', error);
+    console.error('Error fetching job status:', error);
     return NextResponse.json(
       {
         error:

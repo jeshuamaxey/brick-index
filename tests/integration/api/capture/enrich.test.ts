@@ -35,6 +35,7 @@ describe('POST /api/capture/enrich', () => {
 
   it('successfully triggers enrichment', async () => {
     const mockResult = {
+      jobId: 'test-job-id',
       total: 5,
       succeeded: 5,
       failed: 0,
@@ -58,6 +59,7 @@ describe('POST /api/capture/enrich', () => {
 
   it('handles optional parameters', async () => {
     const mockResult = {
+      jobId: 'test-job-id',
       total: 10,
       succeeded: 10,
       failed: 0,
@@ -89,6 +91,7 @@ describe('POST /api/capture/enrich', () => {
 
   it('uses default values when parameters not provided', async () => {
     mockEnrichListings.mockResolvedValue({
+      jobId: 'test-job-id',
       total: 0,
       succeeded: 0,
       failed: 0,
@@ -176,6 +179,7 @@ describe('POST /api/capture/enrich', () => {
 
   it('handles empty body gracefully', async () => {
     mockEnrichListings.mockResolvedValue({
+      jobId: 'test-job-id',
       total: 0,
       succeeded: 0,
       failed: 0,

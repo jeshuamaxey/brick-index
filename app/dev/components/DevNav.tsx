@@ -9,6 +9,7 @@ const navItems = [
   { href: '/dev/listings', label: 'Listings' },
   { href: '/dev/analysis', label: 'Analysis' },
   { href: '/dev/capture', label: 'Capture' },
+  { href: '/dev/jobs', label: 'Jobs' },
   { href: '/dev/seed', label: 'Seed' },
   { href: '/dev/aggregate', label: 'Aggregate' },
 ];

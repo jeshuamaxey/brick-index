@@ -82,8 +82,11 @@ export interface SearchResult {
   created_at: Date;
 }
 
-export interface CaptureJob {
+export type JobType = 'ebay_refresh_listings' | 'ebay_enrich_listings';
+
+export interface Job {
   id: string;
+  type: JobType;
   marketplace: Marketplace;
   status: 'running' | 'completed' | 'failed';
   listings_found: number;
@@ -92,7 +95,11 @@ export interface CaptureJob {
   started_at: Date;
   completed_at: Date | null;
   error_message: string | null;
+  metadata?: Record<string, unknown>;
 }
+
+// Legacy type alias for backward compatibility during migration
+export type CaptureJob = Job;
 
 export interface ExtractedData {
   piece_count: number | null;

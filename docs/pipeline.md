@@ -95,11 +95,17 @@ listings (unenriched) → eBay Browse API getItem → raw_listings (enriched) �
 **Key Tables**:
 - `pipeline.raw_listings`: Raw JSON responses from APIs (both search and enrichment)
 - `pipeline.listings`: Structured listing data with enrichment fields
-- `pipeline.capture_jobs`: Log of capture operations
+- `pipeline.jobs`: Job tracking for async operations (capture, enrichment, etc.)
+
+**Job Tracking**:
+- All capture and enrichment operations are tracked in `pipeline.jobs` table
+- Job types: `ebay_refresh_listings` (initial capture), `ebay_enrich_listings` (enrichment)
+- Jobs include metadata, status (running/completed/failed), and outcome statistics
 
 **API Endpoints**:
-- `POST /api/capture/trigger` - Trigger initial capture
-- `POST /api/capture/enrich` - Trigger enrichment process
+- `POST /api/capture/trigger` - Trigger initial capture (creates job with type `ebay_refresh_listings`)
+- `POST /api/capture/enrich` - Trigger enrichment process (creates job with type `ebay_enrich_listings`)
+- `GET /api/jobs` - View all jobs with optional filtering
 
 ## Stage 2: Analyze
 
@@ -154,7 +160,7 @@ All data related to the capture and analysis pipeline:
 - `raw_listings`: Raw API responses (ground truth) - includes both search and enrichment responses
 - `listings`: Structured listing data with enrichment fields (description, additional_images, condition_description, category_path, item_location, estimated_availabilities, buying_options)
 - `listing_analysis`: Extracted attributes and calculated values
-- `capture_jobs`: Capture operation logs
+- `jobs`: Job tracking for async operations with type enum (e.g., `ebay_refresh_listings`, `ebay_enrich_listings`)
 
 ### `public` Schema
 All data related to user-facing features:
