@@ -37,10 +37,10 @@ export default function SeedPage() {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-8 bg-background text-foreground">
       <h1 className="text-2xl font-bold mb-4">Seed Test Data</h1>
       <DevNav />
-      <p className="mb-4 text-gray-600">
+      <p className="mb-4 text-foreground/70">
         Use this page to populate the database with mock LEGO listings when you
         don't have eBay API access yet.
       </p>
@@ -50,45 +50,45 @@ export default function SeedPage() {
           <button
             onClick={() => seedData('listings')}
             disabled={loading}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed mr-2"
+            className="px-4 py-2 bg-foreground text-background rounded hover:bg-foreground/90 disabled:opacity-50 disabled:cursor-not-allowed mr-2"
           >
             {loading ? 'Seeding...' : 'Seed Listings Only'}
           </button>
           <button
             onClick={() => seedData('analyze')}
             disabled={loading}
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed mr-2"
+            className="px-4 py-2 bg-foreground text-background rounded hover:bg-foreground/90 disabled:opacity-50 disabled:cursor-not-allowed mr-2"
           >
             {loading ? 'Analyzing...' : 'Analyze Existing Listings'}
           </button>
           <button
             onClick={() => seedData('all')}
             disabled={loading}
-            className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-foreground text-background rounded hover:bg-foreground/90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Seeding All...' : 'Seed Everything'}
           </button>
         </div>
 
         {error && (
-          <div className="p-4 bg-red-100 text-red-700 rounded">
+          <div className="p-4 bg-foreground/10 border border-foreground/20 rounded text-foreground">
             Error: {error}
           </div>
         )}
 
         {result && (
-          <div className="p-4 bg-green-100 text-green-700 rounded">
+          <div className="p-4 bg-foreground/10 border border-foreground/20 rounded text-foreground">
             <h2 className="font-semibold mb-2">Success!</h2>
-            <pre className="text-sm overflow-auto">
+            <pre className="text-sm overflow-auto text-foreground">
               {JSON.stringify(result, null, 2)}
             </pre>
           </div>
         )}
       </div>
 
-      <div className="mt-8 p-4 bg-gray-100 rounded">
-        <h2 className="font-semibold mb-2">What This Does:</h2>
-        <ul className="list-disc list-inside space-y-1 text-sm">
+      <div className="mt-8 p-4 bg-background border border-foreground/10 rounded">
+        <h2 className="font-semibold mb-2 text-foreground">What This Does:</h2>
+        <ul className="list-disc list-inside space-y-1 text-sm text-foreground">
           <li>
             <strong>Seed Listings:</strong> Creates 5 mock LEGO listings using
             the mock adapter (no eBay API needed)

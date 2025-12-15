@@ -137,52 +137,52 @@ export default function CapturePage() {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-8 bg-background text-foreground">
       <h1 className="text-2xl font-bold mb-4">Capture Jobs</h1>
       <DevNav />
 
-      <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
-        <h2 className="text-lg font-semibold mb-2">What does "Trigger Capture" do?</h2>
-        <ul className="list-disc list-inside space-y-2 text-sm text-gray-700">
+      <div className="mb-6 p-4 bg-background border border-foreground/10 rounded-lg">
+        <h2 className="text-lg font-semibold mb-2 text-foreground">What does "Trigger Capture" do?</h2>
+        <ul className="list-disc list-inside space-y-2 text-sm text-foreground">
           <li>
             <strong>Searches for LEGO listings</strong> on eBay using keywords: "lego bulk", "lego job lot", "lego lot"
           </li>
           <li>
-            <strong>Uses mock data</strong> if <code className="bg-gray-200 px-1 rounded">EBAY_APP_ID</code> is not set, or{' '}
+            <strong>Uses mock data</strong> if <code className="bg-foreground/10 px-1 rounded text-foreground">EBAY_APP_ID</code> is not set, or{' '}
             <strong>real eBay API</strong> if you have an App ID configured
           </li>
           <li>
-            <strong>Stores raw API responses</strong> in the <code className="bg-gray-200 px-1 rounded">raw_listings</code> table
+            <strong>Stores raw API responses</strong> in the <code className="bg-foreground/10 px-1 rounded text-foreground">raw_listings</code> table
           </li>
           <li>
-            <strong>Transforms data</strong> into structured listings in the <code className="bg-gray-200 px-1 rounded">listings</code> table
+            <strong>Transforms data</strong> into structured listings in the <code className="bg-foreground/10 px-1 rounded text-foreground">listings</code> table
           </li>
           <li>
             <strong>Deduplicates</strong> listings to avoid storing the same listing twice
           </li>
           <li>
-            <strong>Updates existing listings</strong> if they were seen before (updates <code className="bg-gray-200 px-1 rounded">last_seen_at</code>)
+            <strong>Updates existing listings</strong> if they were seen before (updates <code className="bg-foreground/10 px-1 rounded text-foreground">last_seen_at</code>)
           </li>
         </ul>
-        <p className="mt-3 text-sm text-gray-600">
-          After capture completes, you can analyze the listings at <code className="bg-gray-200 px-1 rounded">/dev/analysis</code> or use the seed page to automatically capture and analyze.
+        <p className="mt-3 text-sm text-foreground/70">
+          After capture completes, you can analyze the listings at <code className="bg-foreground/10 px-1 rounded text-foreground">/dev/analysis</code> or use the seed page to automatically capture and analyze.
         </p>
       </div>
 
-      <div className="mt-6 p-6 bg-white rounded-lg border">
+      <div className="mt-6 p-6 bg-background border border-foreground/10 rounded-lg">
         <h2 className="text-lg font-semibold mb-4">Search Configuration</h2>
 
         <div className="space-y-4">
           {/* Keywords */}
           <div>
-            <label className="block text-sm font-medium mb-1">
+            <label className="block text-sm font-medium mb-1 text-foreground">
               Keywords (comma-separated)
             </label>
             <input
               type="text"
               value={keywords}
               onChange={(e) => setKeywords(e.target.value)}
-              className="w-full px-3 py-2 border rounded"
+              className="w-full px-3 py-2 border border-foreground/20 rounded bg-background text-foreground"
               placeholder="lego bulk, lego job lot, lego lot"
             />
           </div>
@@ -196,7 +196,7 @@ export default function CapturePage() {
                 onChange={(e) => setUseEntriesPerPage(e.target.checked)}
                 className="rounded"
               />
-              <label className="text-sm font-medium">
+              <label className="text-sm font-medium text-foreground">
                 Entries Per Page
               </label>
             </div>
@@ -205,7 +205,7 @@ export default function CapturePage() {
                 type="number"
                 value={entriesPerPage}
                 onChange={(e) => setEntriesPerPage(e.target.value)}
-                className="w-full px-3 py-2 border rounded"
+                className="w-full px-3 py-2 border border-foreground/20 rounded bg-background text-foreground"
                 min="1"
                 max="100"
               />
@@ -221,7 +221,7 @@ export default function CapturePage() {
                 onChange={(e) => setUseListingTypes(e.target.checked)}
                 className="rounded"
               />
-              <label className="text-sm font-medium">Listing Types</label>
+              <label className="text-sm font-medium text-foreground">Listing Types</label>
             </div>
             {useListingTypes && (
               <div className="ml-6 space-y-2">
@@ -232,7 +232,7 @@ export default function CapturePage() {
                     onChange={(e) => setListingTypeAuction(e.target.checked)}
                     className="rounded"
                   />
-                  <span className="text-sm">AuctionWithBIN</span>
+                  <span className="text-sm text-foreground">AuctionWithBIN</span>
                 </label>
                 <label className="flex items-center gap-2">
                   <input
@@ -241,7 +241,7 @@ export default function CapturePage() {
                     onChange={(e) => setListingTypeFixed(e.target.checked)}
                     className="rounded"
                   />
-                  <span className="text-sm">FixedPrice</span>
+                  <span className="text-sm text-foreground">FixedPrice</span>
                 </label>
               </div>
             )}
@@ -256,7 +256,7 @@ export default function CapturePage() {
                 onChange={(e) => setUseHideDuplicates(e.target.checked)}
                 className="rounded"
               />
-              <label className="text-sm font-medium">Hide Duplicate Items</label>
+              <label className="text-sm font-medium text-foreground">Hide Duplicate Items</label>
             </div>
             {useHideDuplicates && (
               <label className="flex items-center gap-2 ml-6">
@@ -266,7 +266,7 @@ export default function CapturePage() {
                   onChange={(e) => setHideDuplicates(e.target.checked)}
                   className="rounded"
                 />
-                <span className="text-sm">Enabled</span>
+                <span className="text-sm text-foreground">Enabled</span>
               </label>
             )}
           </div>
@@ -280,14 +280,14 @@ export default function CapturePage() {
                 onChange={(e) => setUseCategoryId(e.target.checked)}
                 className="rounded"
               />
-              <label className="text-sm font-medium">Category ID</label>
+              <label className="text-sm font-medium text-foreground">Category ID</label>
             </div>
             {useCategoryId && (
               <input
                 type="text"
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value)}
-                className="w-full px-3 py-2 border rounded"
+                className="w-full px-3 py-2 border border-foreground/20 rounded bg-background text-foreground"
                 placeholder="220 (LEGO category)"
               />
             )}
@@ -297,22 +297,22 @@ export default function CapturePage() {
         <button
           onClick={triggerCapture}
           disabled={loading}
-          className="mt-6 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="mt-6 px-4 py-2 bg-foreground text-background rounded hover:bg-foreground/90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? 'Triggering...' : 'Trigger Capture'}
         </button>
       </div>
 
       {error && (
-        <div className="mt-4 p-4 bg-red-100 text-red-700 rounded">
+        <div className="mt-4 p-4 bg-foreground/10 border border-foreground/20 rounded text-foreground">
           Error: {error}
         </div>
       )}
 
       {job && (
-        <div className="mt-6 border rounded-lg p-4">
-          <h2 className="text-lg font-semibold mb-2">Job Status</h2>
-          <div className="space-y-2 text-sm">
+        <div className="mt-6 bg-background border border-foreground/10 rounded-lg p-4">
+          <h2 className="text-lg font-semibold mb-2 text-foreground">Job Status</h2>
+          <div className="space-y-2 text-sm text-foreground">
             <div>
               <strong>ID:</strong> {job.id}
             </div>
@@ -321,15 +321,7 @@ export default function CapturePage() {
             </div>
             <div>
               <strong>Status:</strong>{' '}
-              <span
-                className={
-                  job.status === 'completed'
-                    ? 'text-green-600'
-                    : job.status === 'failed'
-                      ? 'text-red-600'
-                      : 'text-yellow-600'
-                }
-              >
+              <span className="text-foreground">
                 {job.status}
               </span>
             </div>
@@ -353,7 +345,7 @@ export default function CapturePage() {
               </div>
             )}
             {job.error_message && (
-              <div className="text-red-600">
+              <div className="text-foreground">
                 <strong>Error:</strong> {job.error_message}
               </div>
             )}

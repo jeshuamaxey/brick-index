@@ -1,6 +1,6 @@
 // API route to aggregate statistics from all listings
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase/client';
 
 interface ListingWithAnalysis {
@@ -69,8 +69,13 @@ function groupByDate(
   return grouped;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const searchParams = request.nextUrl.searchParams;
+    const numberOfBuckets = parseInt(searchParams.get('numberOfBuckets') || '5', 10);
+    const validNumberOfBuckets = [5, 10, 25, 50, 100];
+    const priceBinCount = validNumberOfBuckets.includes(numberOfBuckets) ? numberOfBuckets : 5;
+
     // Fetch all listings with their analysis data
     const { data: listings, error } = await supabase
       .schema('pipeline')
@@ -103,6 +108,32 @@ export async function GET() {
       (l) => l.listing_analysis && l.listing_analysis.length > 0
     ).length;
     const withoutAnalysis = totalListings - withAnalysis;
+
+    const withPricePerPiece = listingsData.filter(
+      (l) => l.listing_analysis?.[0]?.price_per_piece !== null && l.listing_analysis[0].price_per_piece !== undefined
+    ).length;
+    const withoutPricePerPiece = totalListings - withPricePerPiece;
+
+    // Price distribution
+    const priceValues = listingsData
+      .map((l) => l.price)
+      .filter((v): v is number => v !== null && v !== undefined && !isNaN(v) && v > 0)
+      .sort((a, b) => a - b);
+
+    const minPrice = priceValues.length > 0 ? Math.min(...priceValues) : 0;
+    const maxPrice = priceValues.length > 0 ? Math.max(...priceValues) : 0;
+    const priceBinSize = maxPrice > 0 ? maxPrice / priceBinCount : 1;
+    const priceBins = Array.from({ length: priceBinCount }, (_, i) => ({
+      range: `${(i * priceBinSize).toFixed(0)}-${((i + 1) * priceBinSize).toFixed(0)}`,
+      min: i * priceBinSize,
+      max: (i + 1) * priceBinSize,
+      count: 0,
+    }));
+
+    for (const value of priceValues) {
+      const binIndex = Math.min(Math.floor(value / priceBinSize), priceBinCount - 1);
+      priceBins[binIndex].count++;
+    }
 
     // Attribute coverage
     const attributeCoverage = {
@@ -529,6 +560,13 @@ export async function GET() {
         byMarketplace,
         withAnalysis,
         withoutAnalysis,
+        withPricePerPiece,
+        withoutPricePerPiece,
+      },
+      priceDistribution: {
+        bins: priceBins,
+        minPrice,
+        maxPrice,
       },
       attributeCoverage,
       pricePerPiece: {
