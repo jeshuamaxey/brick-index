@@ -31,7 +31,17 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      adapter = new EbayAdapter(ebayAppId);
+      const oauthToken = process.env.EBAY_OAUTH_APP_TOKEN;
+      if (!oauthToken) {
+        return NextResponse.json(
+          {
+            error:
+              'EBAY_OAUTH_APP_TOKEN environment variable is required for enrichment',
+          },
+          { status: 400 }
+        );
+      }
+      adapter = new EbayAdapter(ebayAppId, oauthToken);
     } else {
       return NextResponse.json(
         { error: `Unsupported marketplace: ${marketplace}` },
