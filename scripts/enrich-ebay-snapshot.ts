@@ -1,6 +1,6 @@
 // Load environment variables from .env.local or .env
 import { config } from 'dotenv';
-import * as path from 'path';
+import path from 'node:path';
 
 config({ path: path.resolve(process.cwd(), '.env.local') });
 config({ path: path.resolve(process.cwd(), '.env') });
@@ -11,7 +11,6 @@ process.env.EBAY_APP_ID = process.env.PROD_EBAY_APP_ID;
 process.env.EBAY_OAUTH_APP_TOKEN = process.env.PROD_EBAY_OAUTH_APP_TOKEN;
 
 import fs from 'node:fs/promises';
-import path from 'node:path';
 
 import { EbayAdapter } from '../lib/capture/marketplace-adapters/ebay-adapter';
 import type { EbaySnapshotFile } from '../lib/capture/marketplace-adapters/ebay-snapshot-adapter';

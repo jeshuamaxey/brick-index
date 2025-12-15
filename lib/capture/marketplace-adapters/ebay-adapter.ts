@@ -323,23 +323,4 @@ export class EbayAdapter implements MarketplaceAdapter {
       throw new Error(`Unknown error fetching item details for ${itemId}`);
     }
   }
-
-  private extractItemsFromResponse(
-    data: EbayFindingApiResponse
-  ): EbayItem[] {
-    const items: EbayItem[] = [];
-
-    const response =
-      data.findItemsByKeywordsResponse?.[0]?.searchResult?.[0]?.item;
-
-    if (response && Array.isArray(response)) {
-      for (const item of response) {
-        if (item) {
-          items.push(item);
-        }
-      }
-    }
-
-    return items;
-  }
 }
