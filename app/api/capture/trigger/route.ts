@@ -48,9 +48,8 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        // Use OAuth token for Browse API if available
-        const oauthToken = process.env.EBAY_OAUTH_APP_TOKEN;
-        adapter = new EbayAdapter(ebayAppId, oauthToken);
+        // OAuth token will be fetched automatically by EbayAdapter
+        adapter = new EbayAdapter(ebayAppId);
       }
     } else {
       return NextResponse.json(

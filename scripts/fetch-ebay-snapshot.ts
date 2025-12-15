@@ -8,8 +8,11 @@ config({ path: path.resolve(process.cwd(), '.env') });
 
 // Override EBAY_ENVIRONMENT to ensure we always fetch from production
 process.env.EBAY_ENVIRONMENT = 'production';
-process.env.EBAY_APP_ID = process.env.PROD_EBAY_APP_ID
-process.env.EBAY_OAUTH_APP_TOKEN=process.env.PROD_EBAY_OAUTH_APP_TOKEN
+process.env.EBAY_APP_ID = process.env.PROD_EBAY_APP_ID;
+// EBAY_CLIENT_SECRET should be set from PROD_EBAY_CLIENT_SECRET if needed
+if (process.env.PROD_EBAY_CLIENT_SECRET) {
+  process.env.EBAY_CLIENT_SECRET = process.env.PROD_EBAY_CLIENT_SECRET;
+}
 
 import {
   EbayAdapter,
@@ -233,10 +236,8 @@ async function main() {
 
   await ensureDirExists(snapshotDir);
 
-  // Get OAuth token if available (for OAuth-based authentication)
-  const oauthToken = process.env.EBAY_OAUTH_APP_TOKEN;
-
-  const adapter = new EbayAdapter(ebayAppId, oauthToken);
+  // OAuth token will be fetched automatically by EbayAdapter
+  const adapter = new EbayAdapter(ebayAppId);
   const profiles = parseProfilesFromArgs();
 
   if (profiles.length === 0) return;

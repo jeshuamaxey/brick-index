@@ -8,7 +8,10 @@ config({ path: path.resolve(process.cwd(), '.env') });
 // Override EBAY_ENVIRONMENT to ensure we always fetch from production
 process.env.EBAY_ENVIRONMENT = 'production';
 process.env.EBAY_APP_ID = process.env.PROD_EBAY_APP_ID;
-process.env.EBAY_OAUTH_APP_TOKEN = process.env.PROD_EBAY_OAUTH_APP_TOKEN;
+// EBAY_CLIENT_SECRET should be set from PROD_EBAY_CLIENT_SECRET if needed
+if (process.env.PROD_EBAY_CLIENT_SECRET) {
+  process.env.EBAY_CLIENT_SECRET = process.env.PROD_EBAY_CLIENT_SECRET;
+}
 
 import fs from 'node:fs/promises';
 
@@ -249,12 +252,12 @@ async function enrichSnapshot(
 
 async function main() {
   const ebayAppId = process.env.EBAY_APP_ID;
-  const oauthToken = process.env.EBAY_OAUTH_APP_TOKEN;
+  const ebayClientSecret = process.env.EBAY_CLIENT_SECRET;
 
-  if (!ebayAppId || !oauthToken) {
+  if (!ebayAppId || !ebayClientSecret) {
     // eslint-disable-next-line no-console
     console.error(
-      'EBAY_APP_ID and EBAY_OAUTH_APP_TOKEN are required to enrich snapshots. Set them in your environment before running this script.'
+      'EBAY_APP_ID and EBAY_CLIENT_SECRET are required to enrich snapshots. Set them in your environment before running this script.'
     );
     process.exitCode = 1;
     return;
@@ -295,7 +298,8 @@ async function main() {
   // eslint-disable-next-line no-console
   console.log(`Delay between API calls: ${delayMs}ms\n`);
 
-  const adapter = new EbayAdapter(ebayAppId, oauthToken);
+  // OAuth token will be fetched automatically by EbayAdapter
+  const adapter = new EbayAdapter(ebayAppId);
   const index = await readSnapshotIndex(snapshotDir);
   const results = [];
 
