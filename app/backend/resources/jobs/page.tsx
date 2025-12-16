@@ -14,6 +14,8 @@ interface Job {
   listings_updated: number;
   started_at: string;
   completed_at: string | null;
+  updated_at: string | null;
+  last_update: string | null;
   error_message: string | null;
   metadata?: Record<string, unknown>;
 }
@@ -23,9 +25,11 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchJobs = async () => {
+  const fetchJobs = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       setError(null);
       const response = await fetch('/api/jobs?limit=100');
       if (!response.ok) {
@@ -33,17 +37,33 @@ export default function JobsPage() {
         throw new Error(data.error || 'Failed to fetch jobs');
       }
       const data = await response.json();
-      setJobs(data.jobs || []);
+      const newJobs = data.jobs || [];
+      setJobs(newJobs);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
+    // Initial fetch
     fetchJobs();
-  }, []);
+
+    // Set up polling interval
+    // Poll every 2 seconds to keep data fresh
+    const pollInterval = setInterval(() => {
+      fetchJobs(true).catch(() => {
+        // Silently handle errors during polling
+      });
+    }, 2000); // Poll every 2 seconds
+
+    return () => {
+      clearInterval(pollInterval);
+    };
+  }, []); // Only run once on mount
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'N/A';
@@ -76,9 +96,34 @@ export default function JobsPage() {
     return `${id.substring(0, 8)}...`;
   };
 
+  const hasRunningJobs = jobs.some((job) => job.status === 'running');
+  const runningJobsCount = jobs.filter((j) => j.status === 'running').length;
+
   return (
     <div className="p-8 bg-background text-foreground">
-      <h1 className="text-2xl font-bold mb-4">Jobs</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-bold">Jobs</h1>
+        <div className="flex items-center gap-3">
+          {hasRunningJobs && (
+            <>
+              <span className="text-xs text-foreground/60 flex items-center gap-2">
+                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                Auto-refreshing every 2s...
+              </span>
+              <span className="text-xs text-yellow-600 dark:text-yellow-400 font-medium">
+                {runningJobsCount} job{runningJobsCount !== 1 ? 's' : ''} running
+              </span>
+            </>
+          )}
+          <button
+            onClick={() => fetchJobs()}
+            disabled={loading}
+            className="px-3 py-1.5 text-sm bg-foreground/10 hover:bg-foreground/20 border border-foreground/20 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {loading ? 'Refreshing...' : 'Refresh'}
+          </button>
+        </div>
+      </div>
 
       {loading && <p className="text-foreground/70">Loading jobs...</p>}
       {error && (
@@ -105,7 +150,13 @@ export default function JobsPage() {
                   Status
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-foreground/70 uppercase tracking-wider border-b border-foreground/10">
+                  Progress
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-foreground/70 uppercase tracking-wider border-b border-foreground/10">
                   Started At
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-foreground/70 uppercase tracking-wider border-b border-foreground/10">
+                  Updated At
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-foreground/70 uppercase tracking-wider border-b border-foreground/10">
                   Completed At
@@ -121,7 +172,7 @@ export default function JobsPage() {
             <tbody className="divide-y divide-foreground/10">
               {jobs.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-foreground/70">
+                  <td colSpan={9} className="px-4 py-8 text-center text-foreground/70">
                     No jobs found
                   </td>
                 </tr>
@@ -146,8 +197,37 @@ export default function JobsPage() {
                         {job.status}
                       </span>
                     </td>
+                    <td className="px-4 py-3 text-sm border-b border-foreground/10">
+                      {job.status === 'running' && job.last_update ? (
+                        <div className="max-w-xs">
+                          <div className="text-foreground/90 text-xs font-medium mb-1">
+                            {job.last_update}
+                          </div>
+                          {job.updated_at && (
+                            <div className="text-foreground/50 text-xs">
+                              {formatDate(job.updated_at)}
+                            </div>
+                          )}
+                        </div>
+                      ) : job.last_update ? (
+                        <div className="text-foreground/70 text-xs max-w-xs">
+                          {job.last_update}
+                        </div>
+                      ) : (
+                        <span className="text-foreground/40">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-sm text-foreground/70 border-b border-foreground/10">
                       {formatDate(job.started_at)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-foreground/70 border-b border-foreground/10">
+                      {job.updated_at ? (
+                        <div className="text-xs">
+                          {formatDate(job.updated_at)}
+                        </div>
+                      ) : (
+                        <span className="text-foreground/40">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-foreground/70 border-b border-foreground/10">
                       {formatDate(job.completed_at)}
@@ -163,6 +243,12 @@ export default function JobsPage() {
                         <div className="space-y-1">
                           <div>Total: {job.listings_found}</div>
                           <div>Succeeded: {job.listings_new}</div>
+                          <div>Failed: {job.listings_updated}</div>
+                        </div>
+                      ) : job.type.includes('analyze') ? (
+                        <div className="space-y-1">
+                          <div>Total: {job.listings_found}</div>
+                          <div>Analyzed: {job.listings_new}</div>
                           <div>Failed: {job.listings_updated}</div>
                         </div>
                       ) : (
