@@ -4,13 +4,17 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/supabase/supabase.types';
 import type { MarketplaceAdapter } from './marketplace-adapters/base-adapter';
 import { DeduplicationService } from './deduplication-service';
+import { BaseJobService } from '@/lib/jobs/base-job-service';
+import { JobProgressTracker } from '@/lib/jobs/job-progress-tracker';
 import type { Job, JobType, RawListing, Listing } from '@/lib/types';
 
 export class CaptureService {
   private deduplicationService: DeduplicationService;
+  private jobService: BaseJobService;
 
   constructor(private supabase: SupabaseClient<Database>) {
     this.deduplicationService = new DeduplicationService(supabase);
+    this.jobService = new BaseJobService(supabase);
   }
 
   /**
@@ -26,50 +30,30 @@ export class CaptureService {
     adapterParams?: unknown
   ): Promise<Job> {
     const marketplace = adapter.getMarketplace();
-    const jobId = crypto.randomUUID();
     
     // Determine job type based on marketplace
     const jobType: JobType = `${marketplace}_refresh_listings` as JobType;
 
-    // Create job record
-    const { data: job, error: jobError } = await this.supabase
-      .schema('pipeline')
-      .from('jobs')
-      .insert({
-        type: jobType,
-        marketplace,
-        status: 'running',
-        listings_found: 0,
-        listings_new: 0,
-        listings_updated: 0,
-        started_at: new Date().toISOString(),
-        metadata: {
-          keywords,
-          adapterParams: adapterParams || null,
-        } as Json,
-      })
-      .select()
-      .single();
+    // Create job record using BaseJobService
+    const job = await this.jobService.createJob(jobType, marketplace, {
+      keywords,
+      adapterParams: adapterParams || null,
+    });
 
-    if (jobError) {
-      console.error('Capture job creation error:', jobError);
-      console.error('Error details:', {
-        code: jobError.code,
-        message: jobError.message,
-        details: jobError.details,
-        hint: jobError.hint,
-        fullError: JSON.stringify(jobError, Object.getOwnPropertyNames(jobError), 2),
-      });
-      throw new Error(
-        `Failed to create capture job: ${jobError.message || jobError.details || jobError.hint || JSON.stringify(jobError)}`
-      );
-    }
+    const jobId = job.id;
 
-    if (!job) {
-      throw new Error('Failed to create capture job: No data returned');
-    }
+    // Create progress tracker
+    const progressTracker = new JobProgressTracker({
+      milestoneInterval: 10,
+      timeIntervalMs: 5000,
+      onUpdate: async (update) => {
+        await this.jobService.updateJobProgress(jobId, update.message, update.stats);
+      },
+    });
 
     try {
+      // Update progress: Searching marketplace
+      await progressTracker.forceUpdate('Searching marketplace...');
       // Search for listings
       // Check if adapter supports optional params (e.g., EbayAdapter)
       let rawResponses: Record<string, unknown>[];
@@ -88,9 +72,17 @@ export class CaptureService {
       }
       const listingsFound = rawResponses.length;
 
+      // Update progress: Found listings
+      await progressTracker.forceUpdate(
+        `Found ${listingsFound} listings, storing raw responses...`,
+        { listings_found: listingsFound }
+      );
+
       // Store raw responses
       const rawListingIds: string[] = [];
-      for (const rawResponse of rawResponses) {
+      progressTracker.reset();
+      for (let i = 0; i < rawResponses.length; i++) {
+        const rawResponse = rawResponses[i];
         const { data: rawListing, error: rawError } = await this.supabase
           .schema('pipeline')
           .from('raw_listings')
@@ -109,10 +101,22 @@ export class CaptureService {
         if (rawListing) {
           rawListingIds.push(rawListing.id);
         }
+
+        // Update progress periodically
+        await progressTracker.recordProgress(
+          `Storing raw responses: ${i + 1} of ${rawResponses.length}`,
+          { listings_found: listingsFound }
+        );
       }
+
+      // Update progress: Processing listings
+      await progressTracker.forceUpdate('Processing listings...', {
+        listings_found: listingsFound,
+      });
 
       // Transform raw responses to structured listings
       const listings: Listing[] = [];
+      progressTracker.reset();
       for (let i = 0; i < rawResponses.length; i++) {
         const rawResponse = rawResponses[i];
         const rawListingId = rawListingIds[i];
@@ -125,7 +129,18 @@ export class CaptureService {
         } catch (error) {
           console.error('Error transforming listing:', error);
         }
+
+        // Update progress periodically
+        await progressTracker.recordProgress(
+          `Processing ${i + 1} of ${rawResponses.length} listings...`,
+          { listings_found: listingsFound }
+        );
       }
+
+      // Update progress: Deduplicating
+      await progressTracker.forceUpdate('Deduplicating listings...', {
+        listings_found: listingsFound,
+      });
 
       // Deduplicate listings
       const { newListings, existingIds } =
@@ -178,64 +193,67 @@ export class CaptureService {
         }
       }
 
-      // Update job
-      const { error: updateJobError } = await this.supabase
+      // Complete job
+      await this.jobService.completeJob(
+        jobId,
+        {
+          listings_found: listingsFound,
+          listings_new: listingsNew,
+          listings_updated: listingsUpdated,
+        },
+        `Completed: Inserted ${listingsNew} new, updated ${listingsUpdated} existing listings`
+      );
+
+      // Fetch and return updated job
+      const { data: completedJob, error: fetchError } = await this.supabase
         .schema('pipeline')
         .from('jobs')
-        .update({
+        .select('*')
+        .eq('id', jobId)
+        .single();
+
+      if (fetchError || !completedJob) {
+        // Return what we know if fetch fails
+        return {
+          ...job,
           status: 'completed',
           listings_found: listingsFound,
           listings_new: listingsNew,
           listings_updated: listingsUpdated,
           completed_at: new Date().toISOString(),
-        })
-        .eq('id', jobId);
-
-      if (updateJobError) {
-        console.error('Error updating capture job:', updateJobError);
+        } as Job;
       }
 
-      return {
-        id: jobId,
-        type: jobType,
-        marketplace,
-        status: 'completed',
-        listings_found: listingsFound,
-        listings_new: listingsNew,
-        listings_updated: listingsUpdated,
-        started_at: job.started_at || new Date().toISOString(),
-        completed_at: new Date().toISOString(),
-        error_message: null,
-        metadata: (job.metadata || {}) as Json,
-      };
+      return completedJob as Job;
     } catch (error) {
-      // Update job with error
+      // Mark job as failed
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
 
-      await this.supabase
+      await this.jobService.failJob(jobId, errorMessage);
+
+      // Fetch and return updated job
+      const { data: failedJob, error: fetchError } = await this.supabase
         .schema('pipeline')
         .from('jobs')
-        .update({
+        .select('*')
+        .eq('id', jobId)
+        .single();
+
+      if (fetchError || !failedJob) {
+        // Return what we know if fetch fails
+        return {
+          ...job,
           status: 'failed',
+          listings_found: 0,
+          listings_new: 0,
+          listings_updated: 0,
           completed_at: new Date().toISOString(),
           error_message: errorMessage,
-        })
-        .eq('id', jobId);
+        } as Job;
+      }
 
-      return {
-        id: jobId,
-        type: jobType,
-        marketplace,
-        status: 'failed',
-        listings_found: 0,
-        listings_new: 0,
-        listings_updated: 0,
-        started_at: job.started_at || new Date().toISOString(),
-        completed_at: new Date().toISOString(),
-        error_message: errorMessage,
-        metadata: (job.metadata || {}) as Json,
-      };
+      return failedJob as Job;
     }
   }
 }
