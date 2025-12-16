@@ -34,6 +34,11 @@ interface EbayBrowseApiResponse {
     estimatedAvailabilityStatus?: string;
   }>;
   total?: number;
+  limit?: number;
+  offset?: number;
+  next?: string;
+  prev?: string;
+  href?: string;
   warnings?: Array<{
     category?: string;
     message?: string;
@@ -70,11 +75,14 @@ interface EbayBrowseItem {
 }
 
 export interface EbaySearchParams {
-  entriesPerPage?: number;
+  entriesPerPage?: number; // 1-200, default: 200
   listingTypes?: string[]; // e.g., ['FIXED_PRICE', 'AUCTION']
   hideDuplicateItems?: boolean;
   categoryId?: string;
   marketplaceId?: string; // e.g., 'EBAY_US', 'EBAY_GB'
+  enablePagination?: boolean; // default: true
+  maxResults?: number; // default: 10000, max: 10000
+  fieldgroups?: string; // default: 'EXTENDED'
 }
 
 export class EbayAdapter implements MarketplaceAdapter {
@@ -126,23 +134,29 @@ export class EbayAdapter implements MarketplaceAdapter {
     return this.oauthToken;
   }
 
-  async searchListings(
-    keywords: string[],
-    params?: EbaySearchParams
-  ): Promise<Record<string, unknown>[]> {
-    const keywordQuery = keywords.join(' ');
+  /**
+   * Make a single API call to fetch a page of results
+   */
+  private async fetchPage(
+    keywordQuery: string,
+    limit: number,
+    offset: number,
+    fieldgroups: string,
+    params: EbaySearchParams | undefined,
+    token: string,
+    marketplaceId: string
+  ): Promise<EbayBrowseApiResponse> {
     const url = new URL(`${this.baseUrl}/item_summary/search`);
 
     // Required query parameter: q (search query)
     url.searchParams.set('q', keywordQuery);
 
-    // Optional parameters
-    if (params?.entriesPerPage !== undefined) {
-      url.searchParams.set('limit', params.entriesPerPage.toString());
-    } else {
-      // Default limit
-      url.searchParams.set('limit', '100');
-    }
+    // Set limit and offset for pagination
+    url.searchParams.set('limit', limit.toString());
+    url.searchParams.set('offset', offset.toString());
+
+    // Set fieldgroups for extended data
+    url.searchParams.set('fieldgroups', fieldgroups);
 
     // Category filter
     if (params?.categoryId !== undefined) {
@@ -168,50 +182,116 @@ export class EbayAdapter implements MarketplaceAdapter {
       }
     }
 
-    // Hide duplicate items (not directly supported in Browse API, but we can filter results)
-    // Note: Browse API doesn't have a direct equivalent, so we'll skip this for now
+    // Build headers - Browse API requires OAuth Bearer token
+    const headers: HeadersInit = {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'X-EBAY-C-MARKETPLACE-ID': marketplaceId,
+    };
+
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `eBay API error: ${response.status} ${response.statusText}. ${errorText}`
+      );
+    }
+
+    const data = (await response.json()) as EbayBrowseApiResponse;
+
+    // Handle warnings if present
+    if (data.warnings && data.warnings.length > 0) {
+      console.warn('eBay API warnings:', data.warnings);
+    }
+
+    return data;
+  }
+
+  async searchListings(
+    keywords: string[],
+    params?: EbaySearchParams
+  ): Promise<Record<string, unknown>[]> {
+    const keywordQuery = keywords.join(' ');
+
+    // Configuration with defaults
+    const limit = params?.entriesPerPage || 200; // Maximum per page
+    const maxResults = params?.maxResults || 10000;
+    const enablePagination = params?.enablePagination !== false; // Default: true
+    const fieldgroups = params?.fieldgroups || 'EXTENDED';
+
+    // Ensure we have a valid token before making requests
+    const token = await this.ensureToken();
+    const marketplaceId = params?.marketplaceId || this.defaultMarketplaceId;
 
     try {
-      // Ensure we have a valid token before making the request
-      const token = await this.ensureToken();
-      
-      // Build headers - Browse API requires OAuth Bearer token
-      const headers: HeadersInit = {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      };
+      let allItems: Array<Record<string, unknown>> = [];
+      let offset = 0;
+      let total: number | null = null;
+      let pageCount = 0;
 
-      // Set marketplace ID header
-      const marketplaceId = params?.marketplaceId || this.defaultMarketplaceId;
-      headers['X-EBAY-C-MARKETPLACE-ID'] = marketplaceId;
-
-      const response = await fetch(url.toString(), {
-        method: 'GET',
-        headers,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(
-          `eBay API error: ${response.status} ${response.statusText}. ${errorText}`
+      do {
+        // Make API call for current page
+        const response = await this.fetchPage(
+          keywordQuery,
+          limit,
+          offset,
+          fieldgroups,
+          params,
+          token,
+          marketplaceId
         );
-      }
 
-      const data = (await response.json()) as EbayBrowseApiResponse;
+        const items = response.itemSummaries || [];
+        pageCount++;
 
-      // Handle warnings if present
-      if (data.warnings && data.warnings.length > 0) {
-        console.warn('eBay API warnings:', data.warnings);
-      }
+        // Log progress
+        console.log(
+          `Fetched page ${pageCount}: ${items.length} items (offset: ${offset}, total: ${response.total ?? 'unknown'})`
+        );
 
-      const items = data.itemSummaries || [];
+        // Add items to collection
+        allItems.push(
+          ...items.map((item) => ({
+            itemId: item.itemId,
+            title: item.title,
+            ...item,
+          }))
+        );
 
-      // Return raw API responses for storage in raw_listings
-      return items.map((item) => ({
-        itemId: item.itemId,
-        title: item.title,
-        ...item,
-      }));
+        // Update total from first response
+        if (total === null) {
+          total = response.total ?? 0;
+        }
+
+        // Check if we should continue pagination
+        const hasMoreResults =
+          enablePagination &&
+          allItems.length < maxResults &&
+          offset + limit < (total ?? 0) &&
+          response.next;
+
+        if (hasMoreResults) {
+          offset += limit;
+          // Add a small delay between requests to respect rate limits
+          // eBay API typically allows reasonable request rates, but a small delay helps
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        } else {
+          break;
+        }
+      } while (true);
+
+      // Limit results to maxResults
+      const finalItems = allItems.slice(0, maxResults);
+
+      console.log(
+        `Pagination complete: Collected ${finalItems.length} items from ${pageCount} page(s)`
+      );
+
+      return finalItems;
     } catch (error) {
       console.error('Error fetching eBay listings:', error);
       throw error;

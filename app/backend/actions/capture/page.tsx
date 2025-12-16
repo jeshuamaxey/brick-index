@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Card,
   CardContent,
@@ -33,6 +34,9 @@ interface EbaySearchParams {
   hideDuplicateItems?: boolean;
   categoryId?: string;
   marketplaceId?: string;
+  enablePagination?: boolean;
+  maxResults?: number;
+  fieldgroups?: string;
 }
 
 export default function CapturePage() {
@@ -44,8 +48,10 @@ export default function CapturePage() {
 
   // Form state
   const [keywords, setKeywords] = useState('lego bulk, lego job lot, lego lot');
-  const [entriesPerPage, setEntriesPerPage] = useState('100');
+  const [entriesPerPage, setEntriesPerPage] = useState('200');
   const [useEntriesPerPage, setUseEntriesPerPage] = useState(true);
+  const [enablePagination, setEnablePagination] = useState(true);
+  const [maxResults, setMaxResults] = useState('10000');
   const [listingTypeFixed, setListingTypeFixed] = useState(true);
   const [listingTypeAuction, setListingTypeAuction] = useState(true);
   const [useListingTypes, setUseListingTypes] = useState(true);
@@ -133,6 +139,18 @@ export default function CapturePage() {
         ebayParams.marketplaceId = marketplaceId;
       }
 
+      // Add pagination parameters
+      ebayParams.enablePagination = enablePagination;
+      if (enablePagination && maxResults) {
+        const max = parseInt(maxResults, 10);
+        if (!isNaN(max) && max > 0 && max <= 10000) {
+          ebayParams.maxResults = max;
+        }
+      }
+
+      // Always use EXTENDED fieldgroups for maximum data
+      ebayParams.fieldgroups = 'EXTENDED';
+
       const response = await fetch('/api/capture/trigger', {
         method: 'POST',
         headers: {
@@ -201,12 +219,10 @@ export default function CapturePage() {
             {/* Entries Per Page */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
+                <Checkbox
                   id="useEntriesPerPage"
                   checked={useEntriesPerPage}
-                  onChange={(e) => setUseEntriesPerPage(e.target.checked)}
-                  className="rounded"
+                  onCheckedChange={(checked) => setUseEntriesPerPage(checked === true)}
                 />
                 <Label htmlFor="useEntriesPerPage">Entries Per Page</Label>
               </div>
@@ -217,42 +233,62 @@ export default function CapturePage() {
                   onChange={(e) => setEntriesPerPage(e.target.value)}
                   min="1"
                   max="200"
-                  placeholder="100"
+                  placeholder="200"
                 />
+              )}
+            </div>
+
+            {/* Enable Pagination */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="enablePagination"
+                  checked={enablePagination}
+                  onCheckedChange={(checked) => setEnablePagination(checked === true)}
+                />
+                <Label htmlFor="enablePagination">Enable Pagination</Label>
+              </div>
+              {enablePagination && (
+                <div className="ml-6 space-y-2">
+                  <Label htmlFor="maxResults">Max Results (1-10000)</Label>
+                  <Input
+                    id="maxResults"
+                    type="number"
+                    value={maxResults}
+                    onChange={(e) => setMaxResults(e.target.value)}
+                    min="1"
+                    max="10000"
+                    placeholder="10000"
+                  />
+                </div>
               )}
             </div>
 
             {/* Listing Types */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
+                <Checkbox
                   id="useListingTypes"
                   checked={useListingTypes}
-                  onChange={(e) => setUseListingTypes(e.target.checked)}
-                  className="rounded"
+                  onCheckedChange={(checked) => setUseListingTypes(checked === true)}
                 />
                 <Label htmlFor="useListingTypes">Listing Types</Label>
               </div>
               {useListingTypes && (
                 <div className="ml-6 space-y-2">
                   <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       id="listingTypeAuction"
                       checked={listingTypeAuction}
-                      onChange={(e) => setListingTypeAuction(e.target.checked)}
-                      className="rounded"
+                      onCheckedChange={(checked) => setListingTypeAuction(checked === true)}
                     />
                     <Label htmlFor="listingTypeAuction">AuctionWithBIN</Label>
                   </div>
                   <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       id="listingTypeFixed"
                       checked={listingTypeFixed}
-                      onChange={(e) => setListingTypeFixed(e.target.checked)}
-                      className="rounded"
+                      onCheckedChange={(checked) => setListingTypeFixed(checked === true)}
                     />
                     <Label htmlFor="listingTypeFixed">FixedPrice</Label>
                   </div>
@@ -263,24 +299,20 @@ export default function CapturePage() {
             {/* Hide Duplicates */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
+                <Checkbox
                   id="useHideDuplicates"
                   checked={useHideDuplicates}
-                  onChange={(e) => setUseHideDuplicates(e.target.checked)}
-                  className="rounded"
+                  onCheckedChange={(checked) => setUseHideDuplicates(checked === true)}
                 />
                 <Label htmlFor="useHideDuplicates">Hide Duplicate Items</Label>
               </div>
               {useHideDuplicates && (
                 <div className="ml-6">
                   <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       id="hideDuplicates"
                       checked={hideDuplicates}
-                      onChange={(e) => setHideDuplicates(e.target.checked)}
-                      className="rounded"
+                      onCheckedChange={(checked) => setHideDuplicates(checked === true)}
                     />
                     <Label htmlFor="hideDuplicates">Enabled</Label>
                   </div>
@@ -291,12 +323,10 @@ export default function CapturePage() {
             {/* Category ID */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
+                <Checkbox
                   id="useCategoryId"
                   checked={useCategoryId}
-                  onChange={(e) => setUseCategoryId(e.target.checked)}
-                  className="rounded"
+                  onCheckedChange={(checked) => setUseCategoryId(checked === true)}
                 />
                 <Label htmlFor="useCategoryId">Category ID</Label>
               </div>
@@ -313,12 +343,10 @@ export default function CapturePage() {
             {/* Marketplace ID */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
+                <Checkbox
                   id="useMarketplaceId"
                   checked={useMarketplaceId}
-                  onChange={(e) => setUseMarketplaceId(e.target.checked)}
-                  className="rounded"
+                  onCheckedChange={(checked) => setUseMarketplaceId(checked === true)}
                 />
                 <Label htmlFor="useMarketplaceId">Marketplace ID</Label>
               </div>
