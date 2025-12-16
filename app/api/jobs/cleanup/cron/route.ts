@@ -1,5 +1,5 @@
 // Cron endpoint for cleaning up stale jobs
-// This endpoint is designed to be called by Vercel Cron or external cron services
+// This endpoint is designed to be called by Vercel Cron (runs once per day at midnight UTC)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase/server';
