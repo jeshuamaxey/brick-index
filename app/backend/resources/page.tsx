@@ -3,6 +3,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface AggregateData {
   basic: {
@@ -50,113 +53,139 @@ export default function ResourcesPage() {
 
   if (loading) {
     return (
-      <div className="p-8 bg-background text-foreground">
+      <div className="p-8">
         <h1 className="text-2xl font-bold mb-4">Market Aggregate</h1>
-        <div className="mt-8 text-foreground/70">Loading aggregate data...</div>
+        <div className="mt-8 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+          </div>
+          <Skeleton className="h-64" />
+        </div>
       </div>
     );
   }
 
   if (error || !data) {
     return (
-      <div className="p-8 bg-background text-foreground">
+      <div className="p-8">
         <h1 className="text-2xl font-bold mb-4">Market Aggregate</h1>
-        <div className="mt-8 text-foreground">Error: {error || 'Failed to load data'}</div>
+        <Card className="mt-8">
+          <CardContent className="pt-6">
+            <div className="text-destructive">Error: {error || 'Failed to load data'}</div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="p-8 bg-background text-foreground">
+    <div className="p-8">
       <h1 className="text-2xl font-bold mb-4">Market Aggregate</h1>
 
       <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-background border border-foreground/10 p-4 rounded-lg">
-          <div className="text-sm text-foreground/70">Total Listings</div>
-          <div className="text-2xl font-bold text-foreground">{data.basic.totalListings.toLocaleString()}</div>
-        </div>
-        <div className="bg-background border border-foreground/10 p-4 rounded-lg">
-          <div className="text-sm text-foreground/70 mb-2">Analysis</div>
-          <div className="space-y-1">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-foreground/70">With Analysis</span>
-              <span className="text-lg font-semibold text-foreground">{data.basic.withAnalysis.toLocaleString()}</span>
+        <Card>
+          <CardHeader>
+            <CardDescription>Total Listings</CardDescription>
+            <CardTitle className="text-2xl">{data.basic.totalListings.toLocaleString()}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Analysis</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">With Analysis</span>
+                <span className="text-lg font-semibold">{data.basic.withAnalysis.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Without Analysis</span>
+                <span className="text-lg font-semibold">{data.basic.withoutAnalysis.toLocaleString()}</span>
+              </div>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-foreground/70">Without Analysis</span>
-              <span className="text-lg font-semibold text-foreground">{data.basic.withoutAnalysis.toLocaleString()}</span>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Price Per Piece</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">With Estimate</span>
+                <span className="text-lg font-semibold">{data.basic.withPricePerPiece.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Without Estimate</span>
+                <span className="text-lg font-semibold">{data.basic.withoutPricePerPiece.toLocaleString()}</span>
+              </div>
             </div>
-          </div>
-        </div>
-        <div className="bg-background border border-foreground/10 p-4 rounded-lg">
-          <div className="text-sm text-foreground/70 mb-2">Price Per Piece</div>
-          <div className="space-y-1">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-foreground/70">With Estimate</span>
-              <span className="text-lg font-semibold text-foreground">{data.basic.withPricePerPiece.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-foreground/70">Without Estimate</span>
-              <span className="text-lg font-semibold text-foreground">{data.basic.withoutPricePerPiece.toLocaleString()}</span>
-            </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="mt-8">
-        <div className="bg-background border border-foreground/10 p-4 rounded-lg">
-          <div className="flex items-center justify-between mb-4">
-            <div className="text-sm text-foreground/70">Price Distribution</div>
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-foreground/70">Number of Buckets:</label>
-              <select
-                value={numberOfBuckets}
-                onChange={(e) => setNumberOfBuckets(Number(e.target.value))}
-                className="px-3 py-1 border border-foreground/20 rounded bg-background text-foreground text-sm"
-              >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-            </div>
-          </div>
-          {data.priceDistribution && data.priceDistribution.bins && data.priceDistribution.bins.length > 0 ? (
-            <div className="space-y-4">
-              <div className="flex gap-4 text-sm">
-                <div>
-                  <span className="text-foreground/70">Min Price: </span>
-                  <span className="font-semibold text-foreground">${data.priceDistribution.minPrice.toFixed(2)}</span>
-                </div>
-                <div>
-                  <span className="text-foreground/70">Max Price: </span>
-                  <span className="font-semibold text-foreground">${data.priceDistribution.maxPrice.toFixed(2)}</span>
-                </div>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Price Distribution</CardTitle>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="buckets">Number of Buckets:</Label>
+                <select
+                  id="buckets"
+                  value={numberOfBuckets}
+                  onChange={(e) => setNumberOfBuckets(Number(e.target.value))}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="border-b border-foreground/10">
-                      <th className="text-left py-2 px-4 text-sm font-semibold text-foreground">Price Range</th>
-                      <th className="text-right py-2 px-4 text-sm font-semibold text-foreground">Listings</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.priceDistribution.bins.map((bin, index) => (
-                      <tr key={index} className="border-b border-foreground/5 hover:bg-foreground/5">
-                        <td className="py-2 px-4 text-sm text-foreground">${bin.range}</td>
-                        <td className="py-2 px-4 text-sm text-foreground text-right">{bin.count.toLocaleString()}</td>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {data.priceDistribution && data.priceDistribution.bins && data.priceDistribution.bins.length > 0 ? (
+              <div className="space-y-4">
+                <div className="flex gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Min Price: </span>
+                    <span className="font-semibold">${data.priceDistribution.minPrice.toFixed(2)}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Max Price: </span>
+                    <span className="font-semibold">${data.priceDistribution.maxPrice.toFixed(2)}</span>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2 px-4 text-sm font-semibold">Price Range</th>
+                        <th className="text-right py-2 px-4 text-sm font-semibold">Listings</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {data.priceDistribution.bins.map((bin, index) => (
+                        <tr key={index} className="border-b hover:bg-muted/50">
+                          <td className="py-2 px-4 text-sm">${bin.range}</td>
+                          <td className="py-2 px-4 text-sm text-right">{bin.count.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="text-sm text-foreground/70">No price data available</div>
-          )}
-        </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">No price data available</div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
