@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
     const withoutAnalysis = totalListings - withAnalysis;
 
     const withPricePerPiece = listingsData.filter(
-      (l) => l.listing_analysis?.[0]?.price_per_piece !== null && l.listing_analysis[0].price_per_piece !== undefined
+      (l) => l.listing_analysis?.[0]?.price_per_piece != null
     ).length;
     const withoutPricePerPiece = totalListings - withPricePerPiece;
 
