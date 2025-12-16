@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/supabase/supabase.types';
 
 // Test the extractEnrichmentFields function logic
 // This mirrors the function from load-ebay-snapshot-into-supabase.ts

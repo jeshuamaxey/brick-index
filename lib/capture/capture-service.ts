@@ -1,6 +1,7 @@
 // Service to orchestrate capture from all marketplaces
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database, Json } from '@/lib/supabase/supabase.types';
 import type { MarketplaceAdapter } from './marketplace-adapters/base-adapter';
 import { DeduplicationService } from './deduplication-service';
 import type { Job, JobType, RawListing, Listing } from '@/lib/types';
@@ -8,7 +9,7 @@ import type { Job, JobType, RawListing, Listing } from '@/lib/types';
 export class CaptureService {
   private deduplicationService: DeduplicationService;
 
-  constructor(private supabase: SupabaseClient) {
+  constructor(private supabase: SupabaseClient<Database>) {
     this.deduplicationService = new DeduplicationService(supabase);
   }
 
@@ -35,7 +36,6 @@ export class CaptureService {
       .schema('pipeline')
       .from('jobs')
       .insert({
-        id: jobId,
         type: jobType,
         marketplace,
         status: 'running',
@@ -46,7 +46,7 @@ export class CaptureService {
         metadata: {
           keywords,
           adapterParams: adapterParams || null,
-        },
+        } as Json,
       })
       .select()
       .single();
@@ -96,7 +96,7 @@ export class CaptureService {
           .from('raw_listings')
           .insert({
             marketplace,
-            api_response: rawResponse,
+            api_response: rawResponse as Json,
           })
           .select('id')
           .single();
@@ -203,10 +203,10 @@ export class CaptureService {
         listings_found: listingsFound,
         listings_new: listingsNew,
         listings_updated: listingsUpdated,
-        started_at: new Date(job.started_at),
-        completed_at: new Date(),
+        started_at: job.started_at || new Date().toISOString(),
+        completed_at: new Date().toISOString(),
         error_message: null,
-        metadata: job.metadata || {},
+        metadata: (job.metadata || {}) as Json,
       };
     } catch (error) {
       // Update job with error
@@ -231,10 +231,10 @@ export class CaptureService {
         listings_found: 0,
         listings_new: 0,
         listings_updated: 0,
-        started_at: new Date(job.started_at),
-        completed_at: new Date(),
+        started_at: job.started_at || new Date().toISOString(),
+        completed_at: new Date().toISOString(),
         error_message: errorMessage,
-        metadata: job.metadata || {},
+        metadata: (job.metadata || {}) as Json,
       };
     }
   }

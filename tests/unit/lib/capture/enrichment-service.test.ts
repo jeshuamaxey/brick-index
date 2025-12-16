@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EnrichmentService } from '@/lib/capture/enrichment-service';
 import { EbayAdapter } from '@/lib/capture/marketplace-adapters/ebay-adapter';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/supabase/supabase.types';
 
 // Mock Supabase client
 const createMockSupabase = () => {
@@ -136,7 +137,7 @@ const createMockSupabase = () => {
   return {
     supabase: {
       schema: mockSchema,
-    } as unknown as SupabaseClient,
+    } as unknown as SupabaseClient<Database>,
     mocks: {
       mockSelect,
       mockInsert,

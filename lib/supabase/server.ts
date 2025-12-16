@@ -3,6 +3,7 @@
 // Required for operations that need to access RLS-protected tables
 
 import { createClient } from '@supabase/supabase-js';
+import type { Database } from './supabase.types';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -21,10 +22,14 @@ if (!supabaseServiceRoleKey) {
 }
 
 // Use service role key for admin operations (bypasses RLS)
-export const supabaseServer = createClient(supabaseUrl, supabaseServiceRoleKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
+export const supabaseServer = createClient<Database>(
+  supabaseUrl,
+  supabaseServiceRoleKey,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
+);
 

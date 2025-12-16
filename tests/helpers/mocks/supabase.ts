@@ -3,12 +3,13 @@
 
 import { vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/supabase/supabase.types';
 
 /**
  * Creates a mock Supabase client for testing
  * Override methods as needed in individual tests
  */
-export function createMockSupabaseClient(): Partial<SupabaseClient> {
+export function createMockSupabaseClient(): Partial<SupabaseClient<Database>> {
   return {
     from: vi.fn(() => ({
       select: vi.fn().mockReturnThis(),

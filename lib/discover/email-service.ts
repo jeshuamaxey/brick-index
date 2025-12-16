@@ -2,13 +2,14 @@
 
 import { Resend } from 'resend';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/supabase/supabase.types';
 import type { Search, Listing, ListingAnalysis } from '@/lib/types';
 
 export class EmailService {
   private resend: Resend;
 
   constructor(
-    private supabase: SupabaseClient,
+    private supabase: SupabaseClient<Database>,
     apiKey?: string
   ) {
     const key = apiKey || process.env.RESEND_API_KEY;

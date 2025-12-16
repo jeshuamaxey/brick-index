@@ -1,102 +1,27 @@
 // Core types for the LEGO marketplace scraper system
 
+import type { Database } from '@/lib/supabase/supabase.types';
+
+// Re-export database types with convenient aliases
+export type RawListing = Database['pipeline']['Tables']['raw_listings']['Row'];
+export type Listing = Database['pipeline']['Tables']['listings']['Row'];
+export type ListingAnalysis =
+  Database['pipeline']['Tables']['listing_analysis']['Row'];
+export type Job = Database['pipeline']['Tables']['jobs']['Row'];
+export type Profile = Database['public']['Tables']['profiles']['Row'];
+export type Search = Database['public']['Tables']['searches']['Row'];
+export type SearchResult = Database['public']['Tables']['search_results']['Row'];
+
+// Database enum types
+export type JobType = Database['pipeline']['Enums']['job_type'];
+
+// Non-database types (computed/transient or not stored in DB)
 export type Marketplace = 'ebay' | 'facebook' | string;
 
+// Note: ListingStatus and AlertFrequency are stored as strings in the database
+// but we keep these as type aliases for type safety in application code
 export type ListingStatus = 'active' | 'sold' | 'expired' | 'removed';
-
 export type AlertFrequency = 'daily' | 'weekly';
-
-export interface RawListing {
-  id: string;
-  created_at: Date;
-  marketplace: Marketplace;
-  api_response: Record<string, unknown>;
-}
-
-export interface Listing {
-  id: string;
-  raw_listing_id: string;
-  marketplace: Marketplace;
-  external_id: string;
-  title: string;
-  description: string | null;
-  price: number | null;
-  currency: string | null;
-  url: string;
-  image_urls: string[];
-  location: string | null;
-  seller_name: string | null;
-  seller_rating: number | null;
-  created_at: Date;
-  updated_at: Date;
-  first_seen_at: Date;
-  last_seen_at: Date;
-  status: ListingStatus;
-  // Enrichment fields from getItem API
-  enriched_at: Date | null;
-  enriched_raw_listing_id: string | null;
-  additional_images: string[];
-  condition_description: string | null;
-  category_path: string | null;
-  item_location: Record<string, unknown> | null;
-  estimated_availabilities: Record<string, unknown> | null;
-  buying_options: string[];
-}
-
-export interface ListingAnalysis {
-  id: string;
-  listing_id: string;
-  piece_count: number | null;
-  estimated_piece_count: boolean;
-  minifig_count: number | null;
-  estimated_minifig_count: boolean;
-  condition: 'new' | 'used' | 'unknown';
-  price_per_piece: number | null;
-  analysis_metadata: Record<string, unknown> | null;
-  analyzed_at: Date;
-  analysis_version: string;
-}
-
-export interface Profile {
-  id: string;
-  created_at: Date;
-  updated_at: Date;
-}
-
-export interface Search {
-  id: string;
-  profile_id: string;
-  name: string;
-  max_price_per_piece: number;
-  email_alerts_enabled: boolean;
-  alert_frequency: AlertFrequency;
-  created_at: Date;
-  updated_at: Date;
-}
-
-export interface SearchResult {
-  id: string;
-  search_id: string;
-  listing_id: string;
-  notified_at: Date | null;
-  created_at: Date;
-}
-
-export type JobType = 'ebay_refresh_listings' | 'ebay_enrich_listings';
-
-export interface Job {
-  id: string;
-  type: JobType;
-  marketplace: Marketplace;
-  status: 'running' | 'completed' | 'failed';
-  listings_found: number;
-  listings_new: number;
-  listings_updated: number;
-  started_at: Date;
-  completed_at: Date | null;
-  error_message: string | null;
-  metadata?: Record<string, unknown>;
-}
 
 // Legacy type alias for backward compatibility during migration
 export type CaptureJob = Job;
