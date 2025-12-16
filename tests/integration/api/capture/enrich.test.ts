@@ -33,7 +33,7 @@ describe('POST /api/capture/enrich', () => {
     process.env.EBAY_OAUTH_APP_TOKEN = 'test-token';
   });
 
-  it('successfully triggers enrichment', async () => {
+  it('successfully triggers enrichment and returns job immediately', async () => {
     const mockResult = {
       jobId: 'test-job-id',
       total: 5,
@@ -42,7 +42,10 @@ describe('POST /api/capture/enrich', () => {
       errors: [],
     };
 
-    mockEnrichListings.mockResolvedValue(mockResult);
+    // Mock to resolve quickly so we can get jobId
+    mockEnrichListings.mockImplementation(() => 
+      Promise.resolve(mockResult)
+    );
 
     const request = new NextRequest('http://localhost/api/capture/enrich', {
       method: 'POST',
@@ -53,7 +56,10 @@ describe('POST /api/capture/enrich', () => {
     const data = await response.json();
 
     expect(response.status).toBe(200);
-    expect(data).toEqual(mockResult);
+    expect(data).toMatchObject({
+      jobId: 'test-job-id',
+      status: 'running',
+    });
     expect(mockEnrichListings).toHaveBeenCalledTimes(1);
   });
 
@@ -66,7 +72,9 @@ describe('POST /api/capture/enrich', () => {
       errors: [],
     };
 
-    mockEnrichListings.mockResolvedValue(mockResult);
+    mockEnrichListings.mockImplementation(() => 
+      Promise.resolve(mockResult)
+    );
 
     const request = new NextRequest('http://localhost/api/capture/enrich', {
       method: 'POST',
@@ -90,13 +98,15 @@ describe('POST /api/capture/enrich', () => {
   });
 
   it('uses default values when parameters not provided', async () => {
-    mockEnrichListings.mockResolvedValue({
-      jobId: 'test-job-id',
-      total: 0,
-      succeeded: 0,
-      failed: 0,
-      errors: [],
-    });
+    mockEnrichListings.mockImplementation(() => 
+      Promise.resolve({
+        jobId: 'test-job-id',
+        total: 0,
+        succeeded: 0,
+        failed: 0,
+        errors: [],
+      })
+    );
 
     const request = new NextRequest('http://localhost/api/capture/enrich', {
       method: 'POST',
@@ -146,9 +156,12 @@ describe('POST /api/capture/enrich', () => {
     expect(mockEnrichListings).not.toHaveBeenCalled();
   });
 
-  it('handles enrichment service errors', async () => {
+  it('handles enrichment service errors during job creation', async () => {
     const errorMessage = 'Enrichment failed';
-    mockEnrichListings.mockRejectedValue(new Error(errorMessage));
+    // Mock to reject immediately (simulating job creation failure)
+    mockEnrichListings.mockImplementation(() => 
+      Promise.reject(new Error(errorMessage))
+    );
 
     const request = new NextRequest('http://localhost/api/capture/enrich', {
       method: 'POST',
@@ -158,12 +171,16 @@ describe('POST /api/capture/enrich', () => {
     const response = await POST(request);
     const data = await response.json();
 
+    // Job creation happens synchronously, so errors during creation are caught
     expect(response.status).toBe(500);
     expect(data.error).toBe(errorMessage);
   });
 
-  it('handles unknown errors', async () => {
-    mockEnrichListings.mockRejectedValue('Unknown error');
+  it('handles unknown errors during job creation', async () => {
+    // Mock to reject immediately with non-Error value
+    mockEnrichListings.mockImplementation(() => 
+      Promise.reject('Unknown error')
+    );
 
     const request = new NextRequest('http://localhost/api/capture/enrich', {
       method: 'POST',
@@ -173,18 +190,21 @@ describe('POST /api/capture/enrich', () => {
     const response = await POST(request);
     const data = await response.json();
 
+    // Job creation happens synchronously, so errors during creation are caught
     expect(response.status).toBe(500);
     expect(data.error).toBe('Unknown error occurred');
   });
 
   it('handles empty body gracefully', async () => {
-    mockEnrichListings.mockResolvedValue({
-      jobId: 'test-job-id',
-      total: 0,
-      succeeded: 0,
-      failed: 0,
-      errors: [],
-    });
+    mockEnrichListings.mockImplementation(() => 
+      Promise.resolve({
+        jobId: 'test-job-id',
+        total: 0,
+        succeeded: 0,
+        failed: 0,
+        errors: [],
+      })
+    );
 
     // Create request with empty JSON object (valid but empty)
     const request = new NextRequest('http://localhost/api/capture/enrich', {
@@ -199,7 +219,10 @@ describe('POST /api/capture/enrich', () => {
     const response = await POST(request);
     expect(response.status).toBe(200);
     const data = await response.json();
-    expect(data.total).toBe(0);
+    expect(data).toMatchObject({
+      jobId: expect.any(String),
+      status: 'running',
+    });
   });
 
   it('handles invalid JSON body gracefully', async () => {

@@ -229,8 +229,13 @@ describe('EnrichmentService', () => {
         expect(result.failed).toBe(0);
         expect(result.errors).toHaveLength(0);
         expect(mocks.mockInsert).toHaveBeenCalledTimes(2);
-        // Update is called for each listing (2) + job update (1) = 3
-        expect(mocks.mockUpdate).toHaveBeenCalledTimes(3);
+        // Update is called for:
+        // - Progress updates (multiple during processing)
+        // - Each listing update (2)
+        // - Job completion (1)
+        // So we expect at least 3, but may be more due to progress tracking
+        expect(mocks.mockUpdate).toHaveBeenCalled();
+        expect(mocks.mockUpdate.mock.calls.length).toBeGreaterThanOrEqual(3);
       });
 
       it('handles empty result set', async () => {
@@ -413,11 +418,26 @@ describe('EnrichmentService', () => {
         mocks.setQueryChain(queryChain);
 
         vi.spyOn(adapter, 'getItemDetails').mockResolvedValue({});
-        // Override update to return error
-        mocks.mockUpdate.mockReturnValueOnce({
-          eq: vi.fn().mockResolvedValue({
-            error: { message: 'Update failed' },
-          }),
+        
+        // Set up update to fail for listing updates (not job updates)
+        // We need to track which update is for listings vs jobs
+        let updateCallCount = 0;
+        mocks.mockUpdate.mockImplementation((data: any) => {
+          updateCallCount++;
+          // First few calls are progress updates, then listing update
+          // Listing update typically has enriched_at field
+          if (data.enriched_at !== undefined) {
+            // This is a listing update - make it fail
+            return {
+              eq: vi.fn().mockResolvedValue({
+                error: { message: 'Update failed' },
+              }),
+            };
+          }
+          // Job updates should succeed
+          return {
+            eq: vi.fn().mockResolvedValue({ error: null }),
+          };
         });
 
         const result = await service.enrichListings(adapter);
@@ -516,8 +536,13 @@ describe('EnrichmentService', () => {
       await service.enrichListings(adapter);
 
         // Verify update was called with extracted fields
+        // Find the listing update (has enriched_at field) among all updates
         expect(mocks.mockUpdateCallbacks.length).toBeGreaterThan(0);
-        const updateData = mocks.mockUpdateCallbacks[0].data;
+        const listingUpdate = mocks.mockUpdateCallbacks.find(
+          (cb) => cb.data.enriched_at !== undefined
+        );
+        expect(listingUpdate).toBeDefined();
+        const updateData = listingUpdate!.data;
         expect(updateData).toMatchObject({
         description: 'Complete description',
         additional_images: ['https://example.com/img1.jpg', 'https://example.com/img2.jpg'],
@@ -558,7 +583,12 @@ describe('EnrichmentService', () => {
       await service.enrichListings(adapter);
 
       expect(mocks.mockUpdateCallbacks.length).toBeGreaterThan(0);
-      const updateData = mocks.mockUpdateCallbacks[0].data;
+      // Find the listing update (has enriched_at field) among all updates
+      const listingUpdate = mocks.mockUpdateCallbacks.find(
+        (cb) => cb.data.enriched_at !== undefined
+      );
+      expect(listingUpdate).toBeDefined();
+      const updateData = listingUpdate!.data;
       expect(updateData).toMatchObject({
         description: 'Minimal description',
         additional_images: [],
@@ -595,7 +625,12 @@ describe('EnrichmentService', () => {
       await service.enrichListings(adapter);
 
       expect(mocks.mockUpdateCallbacks.length).toBeGreaterThan(0);
-      const updateData = mocks.mockUpdateCallbacks[0].data;
+      // Find the listing update (has enriched_at field) among all updates
+      const listingUpdate = mocks.mockUpdateCallbacks.find(
+        (cb) => cb.data.enriched_at !== undefined
+      );
+      expect(listingUpdate).toBeDefined();
+      const updateData = listingUpdate!.data;
       expect(updateData.additional_images).toEqual([
         'https://example.com/valid.jpg',
         'https://example.com/also-valid.jpg',
