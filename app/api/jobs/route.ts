@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase/server';
+import type { Database } from '@/lib/supabase/supabase.types';
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,7 +21,8 @@ export async function GET(request: NextRequest) {
 
     // Apply filters
     if (type) {
-      query = query.eq('type', type);
+      // Type assertion needed because query param is string, but DB expects enum
+      query = query.eq('type', type as Database['pipeline']['Enums']['job_type']);
     }
     if (status) {
       query = query.eq('status', status);

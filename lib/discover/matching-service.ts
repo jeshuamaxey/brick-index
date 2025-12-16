@@ -1,10 +1,11 @@
 // Service to match listings to user searches
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/supabase/supabase.types';
 import type { Search, Listing, ListingAnalysis } from '@/lib/types';
 
 export class MatchingService {
-  constructor(private supabase: SupabaseClient) {}
+  constructor(private supabase: SupabaseClient<Database>) {}
 
   /**
    * Match listings to a search's criteria

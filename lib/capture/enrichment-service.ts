@@ -1,6 +1,7 @@
 // Service to enrich listings with detailed information from marketplace APIs
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database, Json } from '@/lib/supabase/supabase.types';
 import type { JobType } from '@/lib/types';
 import type { MarketplaceAdapter } from './marketplace-adapters/base-adapter';
 import { EbayAdapter } from './marketplace-adapters/ebay-adapter';
@@ -36,7 +37,7 @@ interface EbayGetItemResponse {
 }
 
 export class EnrichmentService {
-  constructor(private supabase: SupabaseClient) {}
+  constructor(private supabase: SupabaseClient<Database>) {}
 
   /**
    * Enrich listings with detailed information from marketplace APIs
@@ -181,7 +182,7 @@ export class EnrichmentService {
           .from('raw_listings')
           .insert({
             marketplace,
-            api_response: enrichedResponse,
+            api_response: enrichedResponse as Json,
           })
           .select('id')
           .single();

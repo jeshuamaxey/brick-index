@@ -2,29 +2,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase/client';
+import type { Database } from '@/lib/supabase/supabase.types';
 
-interface ListingWithAnalysis {
-  id: string;
-  status: string;
-  marketplace: string;
-  price: number | null;
-  currency: string | null;
-  description: string | null;
-  location: string | null;
-  seller_name: string | null;
-  seller_rating: number | null;
-  created_at: string;
-  first_seen_at: string;
-  listing_analysis: Array<{
-    piece_count: number | null;
-    estimated_piece_count: boolean;
-    minifig_count: number | null;
-    estimated_minifig_count: boolean;
-    condition: string;
-    price_per_piece: number | null;
-    analyzed_at: string;
-  }>;
-}
+// Type for listing with joined analysis data
+type ListingWithAnalysis = Database['pipeline']['Tables']['listings']['Row'] & {
+  listing_analysis: Database['pipeline']['Tables']['listing_analysis']['Row'][];
+};
 
 function calculatePercentile(sorted: number[], percentile: number): number {
   if (sorted.length === 0) return 0;
@@ -46,7 +29,9 @@ function groupByDate(
       if (!analysis?.analyzed_at) continue;
       date = new Date(analysis.analyzed_at);
     } else {
-      date = new Date(item[dateField]);
+      const fieldValue = item[dateField];
+      if (!fieldValue) continue;
+      date = new Date(fieldValue);
     }
     
     let key: string;
@@ -95,7 +80,8 @@ export async function GET(request: NextRequest) {
 
     // Basic counts
     const byStatus = listingsData.reduce((acc, listing) => {
-      acc[listing.status] = (acc[listing.status] || 0) + 1;
+      const status = listing.status || 'unknown';
+      acc[status] = (acc[status] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
@@ -516,7 +502,8 @@ export async function GET(request: NextRequest) {
       daily: Array.from(timeSeriesDaily.entries())
         .map(([date, items]) => {
           const statusCounts = items.reduce((acc, item) => {
-            acc[item.status] = (acc[item.status] || 0) + 1;
+            const status = item.status || 'unknown';
+            acc[status] = (acc[status] || 0) + 1;
             return acc;
           }, {} as Record<string, number>);
           return {
@@ -529,7 +516,8 @@ export async function GET(request: NextRequest) {
       weekly: Array.from(timeSeriesWeekly.entries())
         .map(([date, items]) => {
           const statusCounts = items.reduce((acc, item) => {
-            acc[item.status] = (acc[item.status] || 0) + 1;
+            const status = item.status || 'unknown';
+            acc[status] = (acc[status] || 0) + 1;
             return acc;
           }, {} as Record<string, number>);
           return {
@@ -542,7 +530,8 @@ export async function GET(request: NextRequest) {
       monthly: Array.from(timeSeriesMonthly.entries())
         .map(([date, items]) => {
           const statusCounts = items.reduce((acc, item) => {
-            acc[item.status] = (acc[item.status] || 0) + 1;
+            const status = item.status || 'unknown';
+            acc[status] = (acc[status] || 0) + 1;
             return acc;
           }, {} as Record<string, number>);
           return {

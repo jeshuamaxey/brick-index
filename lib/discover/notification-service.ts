@@ -1,6 +1,7 @@
 // Service to orchestrate matching and notifications
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/supabase/supabase.types';
 import { MatchingService } from './matching-service';
 import { EmailService } from './email-service';
 import type { Listing, ListingAnalysis } from '@/lib/types';
@@ -8,9 +9,9 @@ import type { Listing, ListingAnalysis } from '@/lib/types';
 export class NotificationService {
   private matchingService: MatchingService;
   private emailService: EmailService;
-  private supabase: SupabaseClient;
+  private supabase: SupabaseClient<Database>;
 
-  constructor(supabase: SupabaseClient, resendApiKey?: string) {
+  constructor(supabase: SupabaseClient<Database>, resendApiKey?: string) {
     this.supabase = supabase;
     this.matchingService = new MatchingService(supabase);
     this.emailService = new EmailService(supabase, resendApiKey);

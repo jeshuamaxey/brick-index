@@ -10,6 +10,7 @@ import fs from 'node:fs/promises';
 
 // Type-only import (doesn't execute module code)
 import type { EbaySnapshotFile } from '../lib/capture/marketplace-adapters/ebay-snapshot-adapter';
+import type { Json } from '../lib/supabase/supabase.types';
 
 // Use dynamic imports for modules that depend on environment variables
 // This ensures dotenv config runs before they're evaluated
@@ -306,7 +307,7 @@ async function main() {
                 .from('raw_listings')
                 .insert({
                   marketplace: 'ebay',
-                  api_response: enrichedResponse,
+                  api_response: enrichedResponse as Json,
                 })
                 .select('id')
                 .single();

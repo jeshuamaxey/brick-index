@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase/server';
+import type { Json } from '@/lib/supabase/supabase.types';
 import * as EventNotificationSDK from 'event-notification-nodejs-sdk';
 import {
   processEbayNotification,
@@ -258,17 +259,17 @@ export async function POST(request: NextRequest) {
       const { error } = await supabaseServer
         .from('ebay_marketplace_account_deletion_notifications')
         .insert({
-          topic,
-          notification_id: notificationId ?? null,
-          event_date: eventDate ? new Date(eventDate) : null,
-          publish_date: publishDate ? new Date(publishDate) : null,
-          publish_attempt_count: publishAttemptCount,
+          topic: topic ?? null,
+          notification_id: notificationId ?? '',
+          event_date: eventDate ? new Date(eventDate).toISOString() : null,
+          publish_date: publishDate ? new Date(publishDate).toISOString() : null,
+          publish_attempt_count: publishAttemptCount ?? null,
           username: username ?? null,
           user_id: userId ?? null,
           eias_token: eiasToken ?? null,
-          signature,
+          signature: signature ?? null,
           verified: true,
-          raw_payload: body,
+          raw_payload: body as Json,
         });
 
       if (error) {

@@ -1,6 +1,7 @@
 // Service to orchestrate analysis of listings
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database, Json } from '@/lib/supabase/supabase.types';
 import type { Listing, ListingAnalysis } from '@/lib/types';
 import { TextExtractor } from './text-extractor';
 import { SimplePricePerPieceEvaluator } from './value-evaluator/simple-price-per-piece';
@@ -9,7 +10,7 @@ export class AnalysisService {
   private textExtractor: TextExtractor;
   private valueEvaluator: SimplePricePerPieceEvaluator;
 
-  constructor(private supabase: SupabaseClient) {
+  constructor(private supabase: SupabaseClient<Database>) {
     this.textExtractor = new TextExtractor();
     this.valueEvaluator = new SimplePricePerPieceEvaluator();
   }
@@ -57,7 +58,7 @@ export class AnalysisService {
       estimated_minifig_count: extractedData.estimated_minifig_count,
       condition: extractedData.condition,
       price_per_piece: pricePerPiece,
-      analysis_metadata: extractedData.metadata,
+      analysis_metadata: extractedData.metadata as Json,
       analysis_version: '1.0.0',
     };
 
@@ -88,10 +89,7 @@ export class AnalysisService {
         throw new Error(`Failed to update analysis: ${updateError.message}`);
       }
 
-      result = {
-        ...updated,
-        analyzed_at: new Date(updated.analyzed_at),
-      };
+      result = updated;
     } else {
       // Insert new analysis
       const { data: inserted, error: insertError } = await this.supabase
@@ -108,10 +106,7 @@ export class AnalysisService {
         throw new Error(`Failed to insert analysis: ${insertError.message}`);
       }
 
-      result = {
-        ...inserted,
-        analyzed_at: new Date(inserted.analyzed_at),
-      };
+      result = inserted;
     }
 
     return result;

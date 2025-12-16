@@ -1,10 +1,11 @@
 // Service to handle deduplication of listings
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/supabase/supabase.types';
 import type { Listing } from '@/lib/types';
 
 export class DeduplicationService {
-  constructor(private supabase: SupabaseClient) {}
+  constructor(private supabase: SupabaseClient<Database>) {}
 
   /**
    * Check if a listing already exists in the database
