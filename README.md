@@ -51,6 +51,9 @@ A backend system to capture, analyze, and discover bulk LEGO job-lot listings fr
 
    # App
    NEXT_PUBLIC_APP_URL=http://localhost:3000
+   
+   # Optional: Cron secret for job cleanup endpoint
+   CRON_SECRET=your-secret-key-here
    ```
 
 4. Initialize Supabase locally:

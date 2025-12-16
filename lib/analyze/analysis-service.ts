@@ -2,17 +2,29 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/supabase/supabase.types';
-import type { Listing, ListingAnalysis } from '@/lib/types';
+import type { Listing, ListingAnalysis, Job, JobType } from '@/lib/types';
 import { TextExtractor } from './text-extractor';
 import { SimplePricePerPieceEvaluator } from './value-evaluator/simple-price-per-piece';
+import { BaseJobService } from '@/lib/jobs/base-job-service';
+import { JobProgressTracker } from '@/lib/jobs/job-progress-tracker';
+
+export interface AnalysisResult {
+  jobId: string;
+  total: number;
+  succeeded: number;
+  failed: number;
+  errors: Array<{ listingId: string; error: string }>;
+}
 
 export class AnalysisService {
   private textExtractor: TextExtractor;
   private valueEvaluator: SimplePricePerPieceEvaluator;
+  private jobService: BaseJobService;
 
   constructor(private supabase: SupabaseClient<Database>) {
     this.textExtractor = new TextExtractor();
     this.valueEvaluator = new SimplePricePerPieceEvaluator();
+    this.jobService = new BaseJobService(supabase);
   }
 
   /**
@@ -187,6 +199,204 @@ export class AnalysisService {
     await this.analyzeListings(listingIds);
 
     return listingIds.length;
+  }
+
+  /**
+   * Analyze listings with job tracking
+   * @param listingIds - Array of listing IDs to analyze (if empty, finds unanalyzed listings)
+   * @param limit - Maximum number of listings to analyze if listingIds is empty
+   * @returns Analysis result with job tracking
+   */
+  async analyzeListingsWithJob(
+    listingIds?: string[],
+    limit?: number
+  ): Promise<AnalysisResult> {
+    // Create job
+    // Note: 'analyze_listings' is added to the enum in migration, but types may not be updated yet
+    const job = await this.jobService.createJob(
+      'analyze_listings' as JobType,
+      'all', // Marketplace doesn't really apply to analysis
+      {
+        listingIds: listingIds || null,
+        limit: limit || null,
+      }
+    );
+
+    const jobId = job.id;
+
+    // Create progress tracker
+    const progressTracker = new JobProgressTracker({
+      milestoneInterval: 10,
+      timeIntervalMs: 5000,
+      onUpdate: async (update) => {
+        await this.jobService.updateJobProgress(jobId, update.message, update.stats);
+      },
+    });
+
+    try {
+      let listingIdsToAnalyze: string[];
+
+      if (listingIds && listingIds.length > 0) {
+        // Use provided listing IDs
+        listingIdsToAnalyze = listingIds;
+        await progressTracker.forceUpdate(
+          `Found ${listingIds.length} listings to analyze...`,
+          { listings_found: listingIds.length }
+        );
+      } else {
+        // Find unanalyzed listings
+        await progressTracker.forceUpdate('Finding unanalyzed listings...');
+
+        // Get all listing IDs that already have analysis
+        const { data: analyzedListings, error: analyzedError } =
+          await this.supabase
+            .schema('pipeline')
+            .from('listing_analysis')
+            .select('listing_id');
+
+        if (analyzedError) {
+          throw new Error(
+            `Failed to fetch analyzed listings: ${analyzedError.message}`
+          );
+        }
+
+        const analyzedListingIds = new Set(
+          (analyzedListings || []).map((a) => a.listing_id)
+        );
+
+        // Fetch active listings
+        const maxLimit = limit || 100;
+        const { data: allListings, error } = await this.supabase
+          .schema('pipeline')
+          .from('listings')
+          .select('id')
+          .eq('status', 'active')
+          .limit(maxLimit * 2); // Fetch more to account for filtering
+
+        if (error) {
+          throw new Error(`Failed to fetch listings: ${error.message}`);
+        }
+
+        if (!allListings || allListings.length === 0) {
+          await this.jobService.completeJob(
+            jobId,
+            { listings_found: 0, listings_new: 0, listings_updated: 0 },
+            'No listings found to analyze'
+          );
+          return {
+            jobId,
+            total: 0,
+            succeeded: 0,
+            failed: 0,
+            errors: [],
+          };
+        }
+
+        // Filter out listings that already have analysis
+        const unanalyzedListings = allListings.filter(
+          (listing) => !analyzedListingIds.has(listing.id)
+        );
+
+        if (unanalyzedListings.length === 0) {
+          await this.jobService.completeJob(
+            jobId,
+            { listings_found: 0, listings_new: 0, listings_updated: 0 },
+            'All listings already analyzed'
+          );
+          return {
+            jobId,
+            total: 0,
+            succeeded: 0,
+            failed: 0,
+            errors: [],
+          };
+        }
+
+        // Take only up to the limit
+        listingIdsToAnalyze = unanalyzedListings
+          .slice(0, maxLimit)
+          .map((l) => l.id);
+
+        await progressTracker.forceUpdate(
+          `Found ${listingIdsToAnalyze.length} listings to analyze...`,
+          { listings_found: listingIdsToAnalyze.length }
+        );
+      }
+
+      const result: AnalysisResult = {
+        jobId,
+        total: listingIdsToAnalyze.length,
+        succeeded: 0,
+        failed: 0,
+        errors: [],
+      };
+
+      progressTracker.reset();
+
+      // Analyze each listing
+      for (let i = 0; i < listingIdsToAnalyze.length; i++) {
+        const listingId = listingIdsToAnalyze[i];
+        try {
+          await this.analyzeListing(listingId);
+          result.succeeded++;
+        } catch (error) {
+          result.failed++;
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          result.errors.push({
+            listingId,
+            error: errorMessage,
+          });
+          console.error(`Error analyzing listing ${listingId}:`, errorMessage);
+        }
+
+        // Update progress periodically
+        await progressTracker.recordProgress(
+          `Analyzing listing ${i + 1} of ${listingIdsToAnalyze.length}...`,
+          {
+            listings_found: listingIdsToAnalyze.length,
+            listings_new: result.succeeded,
+            listings_updated: result.failed,
+          }
+        );
+      }
+
+      // Complete or fail job
+      const finalStatus = result.failed === result.total ? 'failed' : 'completed';
+      const finalMessage =
+        result.failed > 0 && result.succeeded === 0
+          ? `All ${result.total} listings failed to analyze`
+          : result.failed > 0
+          ? `Completed: ${result.succeeded} analyzed successfully, ${result.failed} failed`
+          : `Completed: ${result.succeeded} listings analyzed successfully`;
+
+      if (finalStatus === 'failed') {
+        await this.jobService.failJob(
+          jobId,
+          result.failed > 0 && result.succeeded === 0
+            ? `All ${result.total} listings failed to analyze`
+            : `${result.failed} of ${result.total} listings failed to analyze`
+        );
+      } else {
+        await this.jobService.completeJob(
+          jobId,
+          {
+            listings_found: result.total,
+            listings_new: result.succeeded,
+            listings_updated: result.failed,
+          },
+          finalMessage
+        );
+      }
+
+      return result;
+    } catch (error) {
+      // Mark job as failed if not already handled
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      await this.jobService.failJob(jobId, errorMessage);
+      throw error;
+    }
   }
 }
 

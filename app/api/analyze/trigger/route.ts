@@ -1,56 +1,27 @@
-// API route to trigger listing enrichment
+// API route to trigger batch analysis job
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase/client';
-import { EnrichmentService } from '@/lib/capture/enrichment-service';
-import { EbayAdapter } from '@/lib/capture/marketplace-adapters/ebay-adapter';
+import { AnalysisService } from '@/lib/analyze/analysis-service';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
     const {
-      marketplace = 'ebay',
+      listingIds,
       limit,
-      delayMs = 200,
     }: {
-      marketplace?: string;
+      listingIds?: string[];
       limit?: number;
-      delayMs?: number;
     } = body;
 
-    // Create adapter based on marketplace
-    let adapter;
-    if (marketplace === 'ebay') {
-      const ebayAppId = process.env.EBAY_APP_ID;
-      if (!ebayAppId) {
-        return NextResponse.json(
-          {
-            error:
-              'EBAY_APP_ID environment variable is required for enrichment',
-          },
-          { status: 400 }
-        );
-      }
-      // OAuth token will be fetched automatically by EbayAdapter
-      adapter = new EbayAdapter(ebayAppId);
-    } else {
-      return NextResponse.json(
-        { error: `Unsupported marketplace: ${marketplace}` },
-        { status: 400 }
-      );
-    }
-
-    // Create enrichment service and start enrichment job
-    const enrichmentService = new EnrichmentService(supabase);
+    // Create analysis service and start analysis job
+    const analysisService = new AnalysisService(supabase);
     
     try {
       // Start the job (it will create the job resource internally)
       // Job creation happens synchronously, so we can catch errors immediately
-      const jobPromise = enrichmentService.enrichListings(adapter, {
-        marketplace,
-        limit,
-        delayMs,
-      });
+      const jobPromise = analysisService.analyzeListingsWithJob(listingIds, limit);
 
       // Wait just long enough to get the job ID (job is created synchronously at start)
       // If job creation fails, this will throw and be caught below
@@ -84,7 +55,7 @@ export async function POST(request: NextRequest) {
       throw error;
     }
   } catch (error) {
-    console.error('Error enriching listings:', error);
+    console.error('Error triggering analysis:', error);
     return NextResponse.json(
       {
         error:
@@ -94,4 +65,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

@@ -58,17 +58,17 @@ export default function AnalyzePage() {
       setError(null);
       setResult(null);
 
-      const response = await fetch('/api/dev/seed', {
+      const response = await fetch('/api/analyze/trigger', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ action: 'analyze' }),
+        body: JSON.stringify({}),
       });
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || 'Failed to analyze listings');
+        throw new Error(data.error || 'Failed to trigger analysis');
       }
 
       const data = await response.json();

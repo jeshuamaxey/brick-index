@@ -5,6 +5,8 @@ import type { Database, Json } from '@/lib/supabase/supabase.types';
 import type { JobType } from '@/lib/types';
 import type { MarketplaceAdapter } from './marketplace-adapters/base-adapter';
 import { EbayAdapter } from './marketplace-adapters/ebay-adapter';
+import { BaseJobService } from '@/lib/jobs/base-job-service';
+import { JobProgressTracker } from '@/lib/jobs/job-progress-tracker';
 
 export interface EnrichmentResult {
   jobId: string;
@@ -37,7 +39,11 @@ interface EbayGetItemResponse {
 }
 
 export class EnrichmentService {
-  constructor(private supabase: SupabaseClient<Database>) {}
+  private jobService: BaseJobService;
+
+  constructor(private supabase: SupabaseClient<Database>) {
+    this.jobService = new BaseJobService(supabase);
+  }
 
   /**
    * Enrich listings with detailed information from marketplace APIs
@@ -56,7 +62,6 @@ export class EnrichmentService {
     const marketplace = options.marketplace || adapter.getMarketplace();
     const limit = options.limit;
     const delayMs = options.delayMs ?? 200;
-    const jobId = crypto.randomUUID();
     
     // Determine job type based on marketplace
     const jobType: JobType = `${marketplace}_enrich_listings` as JobType;
@@ -72,195 +77,216 @@ export class EnrichmentService {
       adapter as EbayAdapter
     );
 
-    // Create job record
-    const { data: job, error: jobError } = await this.supabase
-      .schema('pipeline')
-      .from('jobs')
-      .insert({
-        id: jobId,
-        type: jobType,
-        marketplace,
-        status: 'running',
-        listings_found: 0,
-        listings_new: 0,
-        listings_updated: 0,
-        started_at: new Date().toISOString(),
-        metadata: {
-          limit: limit || null,
-          delayMs,
-          marketplace,
-        },
-      })
-      .select()
-      .single();
+    // Create job record using BaseJobService
+    const job = await this.jobService.createJob(jobType, marketplace, {
+      limit: limit || null,
+      delayMs,
+      marketplace,
+    });
 
-    if (jobError) {
-      console.error('Enrichment job creation error:', jobError);
-      throw new Error(
-        `Failed to create enrichment job: ${jobError.message || jobError.details || jobError.hint || JSON.stringify(jobError)}`
+    const jobId = job.id;
+
+    // Create progress tracker
+    const progressTracker = new JobProgressTracker({
+      milestoneInterval: 10,
+      timeIntervalMs: 5000,
+      onUpdate: async (update) => {
+        await this.jobService.updateJobProgress(jobId, update.message, update.stats);
+      },
+    });
+
+    try {
+      // Update progress: Querying listings
+      await progressTracker.forceUpdate('Querying unenriched listings...');
+
+      // Query for unenriched listings
+      let query = this.supabase
+        .schema('pipeline')
+        .from('listings')
+        .select('id, external_id, marketplace')
+        .is('enriched_at', null)
+        .eq('status', 'active')
+        .eq('marketplace', marketplace);
+
+      if (limit) {
+        query = query.limit(limit);
+      }
+
+      const { data: listings, error: queryError } = await query;
+
+      if (queryError) {
+        await this.jobService.failJob(
+          jobId,
+          `Failed to query listings: ${queryError.message}`
+        );
+        throw new Error(`Failed to query listings: ${queryError.message}`);
+      }
+
+      if (!listings || listings.length === 0) {
+        // Complete job with no work
+        await this.jobService.completeJob(
+          jobId,
+          { listings_found: 0, listings_new: 0, listings_updated: 0 },
+          'No listings found to enrich'
+        );
+        
+        return {
+          jobId,
+          total: 0,
+          succeeded: 0,
+          failed: 0,
+          errors: [],
+        };
+      }
+
+      // Update progress: Found listings
+      await progressTracker.forceUpdate(
+        `Found ${listings.length} listings to enrich...`,
+        { listings_found: listings.length }
       );
-    }
 
-    if (!job) {
-      throw new Error('Failed to create enrichment job: No data returned');
-    }
-
-    // Query for unenriched listings
-    let query = this.supabase
-      .schema('pipeline')
-      .from('listings')
-      .select('id, external_id, marketplace')
-      .is('enriched_at', null)
-      .eq('status', 'active')
-      .eq('marketplace', marketplace);
-
-    if (limit) {
-      query = query.limit(limit);
-    }
-
-    const { data: listings, error: queryError } = await query;
-
-    if (queryError) {
-      // Update job with error
-      await this.supabase
-        .schema('pipeline')
-        .from('jobs')
-        .update({
-          status: 'failed',
-          completed_at: new Date().toISOString(),
-          error_message: `Failed to query listings: ${queryError.message}`,
-        })
-        .eq('id', jobId);
-      throw new Error(`Failed to query listings: ${queryError.message}`);
-    }
-
-    if (!listings || listings.length === 0) {
-      // Update job as completed with no work
-      await this.supabase
-        .schema('pipeline')
-        .from('jobs')
-        .update({
-          status: 'completed',
-          listings_found: 0,
-          listings_new: 0,
-          listings_updated: 0,
-          completed_at: new Date().toISOString(),
-        })
-        .eq('id', jobId);
-      
-      return {
+      const result: EnrichmentResult = {
         jobId,
-        total: 0,
+        total: listings.length,
         succeeded: 0,
         failed: 0,
         errors: [],
       };
-    }
 
-    const result: EnrichmentResult = {
-      jobId,
-      total: listings.length,
-      succeeded: 0,
-      failed: 0,
-      errors: [],
-    };
+      progressTracker.reset();
 
-    // Process each listing
-    for (const listing of listings) {
-      try {
-        // Add delay between API calls to respect rate limits
-        if (delayMs > 0 && result.total > 1) {
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
+      // Process each listing
+      for (let i = 0; i < listings.length; i++) {
+        const listing = listings[i];
+        try {
+          // Add delay between API calls to respect rate limits
+          if (delayMs > 0 && result.total > 1) {
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+          }
+
+          // Call getItemDetails API
+          const enrichedResponse = await getItemDetails(listing.external_id);
+
+          // Store raw enriched response
+          const { data: rawListing, error: rawError } = await this.supabase
+            .schema('pipeline')
+            .from('raw_listings')
+            .insert({
+              marketplace,
+              api_response: enrichedResponse as Json,
+            })
+            .select('id')
+            .single();
+
+          if (rawError) {
+            throw new Error(`Failed to store raw listing: ${rawError.message}`);
+          }
+
+          if (!rawListing) {
+            throw new Error('Failed to store raw listing: No ID returned');
+          }
+
+          // Extract fields from enriched response
+          const ebayResponse = enrichedResponse as EbayGetItemResponse;
+          const extractedFields = this.extractEnrichmentFields(ebayResponse);
+
+          // Update listing with enriched data
+          const { error: updateError } = await this.supabase
+            .schema('pipeline')
+            .from('listings')
+            .update({
+              ...extractedFields,
+              enriched_at: new Date().toISOString(),
+              enriched_raw_listing_id: rawListing.id,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', listing.id);
+
+          if (updateError) {
+            throw new Error(`Failed to update listing: ${updateError.message}`);
+          }
+
+          result.succeeded++;
+        } catch (error) {
+          result.failed++;
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          result.errors.push({
+            listingId: listing.id,
+            error: errorMessage,
+          });
+          console.error(
+            `Error enriching listing ${listing.id} (${listing.external_id}):`,
+            errorMessage
+          );
         }
 
-        // Call getItemDetails API
-        const enrichedResponse = await getItemDetails(listing.external_id);
-
-        // Store raw enriched response
-        const { data: rawListing, error: rawError } = await this.supabase
-          .schema('pipeline')
-          .from('raw_listings')
-          .insert({
-            marketplace,
-            api_response: enrichedResponse as Json,
-          })
-          .select('id')
-          .single();
-
-        if (rawError) {
-          throw new Error(`Failed to store raw listing: ${rawError.message}`);
-        }
-
-        if (!rawListing) {
-          throw new Error('Failed to store raw listing: No ID returned');
-        }
-
-        // Extract fields from enriched response
-        const ebayResponse = enrichedResponse as EbayGetItemResponse;
-        const extractedFields = this.extractEnrichmentFields(ebayResponse);
-
-        // Update listing with enriched data
-        const { error: updateError } = await this.supabase
-          .schema('pipeline')
-          .from('listings')
-          .update({
-            ...extractedFields,
-            enriched_at: new Date().toISOString(),
-            enriched_raw_listing_id: rawListing.id,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', listing.id);
-
-        if (updateError) {
-          throw new Error(`Failed to update listing: ${updateError.message}`);
-        }
-
-        result.succeeded++;
-      } catch (error) {
-        result.failed++;
-        const errorMessage =
-          error instanceof Error ? error.message : 'Unknown error';
-        result.errors.push({
-          listingId: listing.id,
-          error: errorMessage,
-        });
-        console.error(
-          `Error enriching listing ${listing.id} (${listing.external_id}):`,
-          errorMessage
+        // Update progress periodically
+        await progressTracker.recordProgress(
+          `Enriching listing ${i + 1} of ${listings.length}...`,
+          {
+            listings_found: listings.length,
+            listings_new: result.succeeded,
+            listings_updated: result.failed,
+          }
         );
       }
-    }
 
-    // Update job with final results
-    const { error: updateJobError } = await this.supabase
-      .schema('pipeline')
-      .from('jobs')
-      .update({
-        status: result.failed === result.total ? 'failed' : 'completed',
-        listings_found: result.total,
-        listings_new: result.succeeded,
-        listings_updated: result.failed,
-        completed_at: new Date().toISOString(),
-        error_message: result.failed > 0 && result.succeeded === 0 
+      // Update metadata with errors
+      const { error: metadataError } = await this.supabase
+        .schema('pipeline')
+        .from('jobs')
+        .update({
+          metadata: {
+            ...(job.metadata as Record<string, unknown> || {}),
+            limit: limit || null,
+            delayMs,
+            marketplace,
+            errors: result.errors,
+          } as Json,
+        })
+        .eq('id', jobId);
+
+      if (metadataError) {
+        console.error('Error updating job metadata:', metadataError);
+      }
+
+      // Complete or fail job
+      const finalStatus = result.failed === result.total ? 'failed' : 'completed';
+      const finalMessage =
+        result.failed > 0 && result.succeeded === 0
           ? `All ${result.total} listings failed to enrich`
           : result.failed > 0
-          ? `${result.failed} of ${result.total} listings failed to enrich`
-          : null,
-        metadata: {
-          ...(job.metadata as Record<string, unknown> || {}),
-          limit: limit || null,
-          delayMs,
-          marketplace,
-          errors: result.errors,
-        },
-      })
-      .eq('id', jobId);
+          ? `Completed: ${result.succeeded} succeeded, ${result.failed} failed`
+          : `Completed: ${result.succeeded} listings enriched successfully`;
 
-    if (updateJobError) {
-      console.error('Error updating enrichment job:', updateJobError);
+      if (finalStatus === 'failed') {
+        await this.jobService.failJob(
+          jobId,
+          result.failed > 0 && result.succeeded === 0
+            ? `All ${result.total} listings failed to enrich`
+            : `${result.failed} of ${result.total} listings failed to enrich`
+        );
+      } else {
+        await this.jobService.completeJob(
+          jobId,
+          {
+            listings_found: result.total,
+            listings_new: result.succeeded,
+            listings_updated: result.failed,
+          },
+          finalMessage
+        );
+      }
+
+      return result;
+    } catch (error) {
+      // Mark job as failed if not already handled
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      await this.jobService.failJob(jobId, errorMessage);
+      throw error;
     }
-
-    return result;
   }
 
   /**
