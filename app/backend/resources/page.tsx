@@ -1,9 +1,8 @@
-// Dev page to view aggregated market statistics
+// Backend page to view aggregated market statistics
 
 'use client';
 
 import { useEffect, useState } from 'react';
-import DevNav from '../components/DevNav';
 
 interface AggregateData {
   basic: {
@@ -23,7 +22,7 @@ interface AggregateData {
   };
 }
 
-export default function AggregatePage() {
+export default function ResourcesPage() {
   const [data, setData] = useState<AggregateData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +52,6 @@ export default function AggregatePage() {
     return (
       <div className="p-8 bg-background text-foreground">
         <h1 className="text-2xl font-bold mb-4">Market Aggregate</h1>
-        <DevNav />
         <div className="mt-8 text-foreground/70">Loading aggregate data...</div>
       </div>
     );
@@ -63,7 +61,6 @@ export default function AggregatePage() {
     return (
       <div className="p-8 bg-background text-foreground">
         <h1 className="text-2xl font-bold mb-4">Market Aggregate</h1>
-        <DevNav />
         <div className="mt-8 text-foreground">Error: {error || 'Failed to load data'}</div>
       </div>
     );
@@ -72,7 +69,6 @@ export default function AggregatePage() {
   return (
     <div className="p-8 bg-background text-foreground">
       <h1 className="text-2xl font-bold mb-4">Market Aggregate</h1>
-      <DevNav />
 
       <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-background border border-foreground/10 p-4 rounded-lg">

@@ -1,9 +1,8 @@
-// Dev page to view all jobs
+// Backend page to view all jobs
 
 'use client';
 
 import { useState, useEffect } from 'react';
-import DevNav from '../components/DevNav';
 
 interface Job {
   id: string;
@@ -80,7 +79,6 @@ export default function JobsPage() {
   return (
     <div className="p-8 bg-background text-foreground">
       <h1 className="text-2xl font-bold mb-4">Jobs</h1>
-      <DevNav />
 
       {loading && <p className="text-foreground/70">Loading jobs...</p>}
       {error && (

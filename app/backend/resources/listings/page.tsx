@@ -1,9 +1,8 @@
-// Dev page to view captured listings
+// Backend page to view captured listings
 
 'use client';
 
 import { useEffect, useState } from 'react';
-import DevNav from '../components/DevNav';
 
 interface Listing {
   id: string;
@@ -57,7 +56,6 @@ export default function ListingsPage() {
   return (
     <div className="p-8 bg-background text-foreground">
       <h1 className="text-2xl font-bold mb-4">Captured Listings</h1>
-      <DevNav />
       <p className="mb-4 text-foreground/70">
         Total: {listings.length} listings
       </p>
