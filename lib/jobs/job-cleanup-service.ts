@@ -16,7 +16,8 @@ export class JobCleanupService {
    * This is the primary method - uses the database function for efficiency
    */
   async cleanupStaleJobs(): Promise<CleanupResult> {
-    const { data, error } = await this.supabase.rpc(
+    // Type assertion needed because the database function is not in generated types yet
+    const { data, error } = await (this.supabase.rpc as any)(
       'mark_stale_jobs_as_timed_out'
     );
 
@@ -26,11 +27,11 @@ export class JobCleanupService {
       );
     }
 
-    if (!data || data.length === 0) {
+    if (!data || (Array.isArray(data) && data.length === 0)) {
       return { jobsUpdated: 0, jobIds: [] };
     }
 
-    const result = data[0] as { jobs_updated: number; job_ids: string[] | null };
+    const result = (Array.isArray(data) ? data[0] : data) as { jobs_updated: number; job_ids: string[] | null };
     return {
       jobsUpdated: result.jobs_updated || 0,
       jobIds: result.job_ids || [],
@@ -64,10 +65,10 @@ export class JobCleanupService {
       return { jobsUpdated: 0, jobIds: [] };
     }
 
-    const staleJobIds = staleJobs.map((job) => job.id);
+    const staleJobIds = staleJobs.map((job: any) => job.id);
 
     // Calculate timeout duration for each job
-    const updates = staleJobs.map((job) => {
+    const updates = staleJobs.map((job: any) => {
       const startedAt = new Date(job.started_at || now);
       const durationMinutes = Math.round(
         (now.getTime() - startedAt.getTime()) / (60 * 1000)
@@ -135,6 +136,8 @@ export class JobCleanupService {
       throw new Error(`Failed to query running jobs: ${runningError.message}`);
     }
 
+    const runningJobsArray = (runningJobs as unknown) as Array<{ started_at: string | null }> | null;
+
     // Count potentially stale jobs
     const sixtyMinutesAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const { count: staleCount, error: staleError } = await this.supabase
@@ -165,8 +168,8 @@ export class JobCleanupService {
       runningJobs: totalRunning || 0,
       potentiallyStale: staleCount || 0,
       oldestRunningJob:
-        runningJobs && runningJobs.length > 0
-          ? runningJobs[0].started_at || null
+        runningJobsArray && runningJobsArray.length > 0
+          ? runningJobsArray[0].started_at || null
           : null,
     };
   }

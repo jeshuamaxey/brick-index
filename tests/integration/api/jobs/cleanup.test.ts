@@ -122,11 +122,7 @@ describe('GET /api/jobs/cleanup', () => {
       oldestRunningJob: new Date().toISOString(),
     });
 
-    const request = new NextRequest('http://localhost/api/jobs/cleanup', {
-      method: 'GET',
-    });
-
-    const response = await GET(request);
+    const response = await GET();
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -139,11 +135,7 @@ describe('GET /api/jobs/cleanup', () => {
   it('should handle stats errors', async () => {
     mockGetStaleJobStats.mockRejectedValue(new Error('Stats failed'));
 
-    const request = new NextRequest('http://localhost/api/jobs/cleanup', {
-      method: 'GET',
-    });
-
-    const response = await GET(request);
+    const response = await GET();
     const data = await response.json();
 
     expect(response.status).toBe(500);
