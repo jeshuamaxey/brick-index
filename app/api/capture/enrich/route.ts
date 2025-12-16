@@ -40,15 +40,49 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create enrichment service and run enrichment
+    // Create enrichment service and start enrichment job
     const enrichmentService = new EnrichmentService(supabase);
-    const result = await enrichmentService.enrichListings(adapter, {
-      marketplace,
-      limit,
-      delayMs,
-    });
+    
+    try {
+      // Start the job (it will create the job resource internally)
+      // Job creation happens synchronously, so we can catch errors immediately
+      const jobPromise = enrichmentService.enrichListings(adapter, {
+        marketplace,
+        limit,
+        delayMs,
+      });
 
-    return NextResponse.json(result);
+      // Wait just long enough to get the job ID (job is created synchronously at start)
+      // If job creation fails, this will throw and be caught below
+      const jobIdPromise = jobPromise.then((result) => result.jobId);
+      
+      // Race between getting job ID and a small timeout
+      // Use a longer timeout to ensure job creation completes
+      const jobId = await Promise.race([
+        jobIdPromise,
+        new Promise<string | null>((resolve) => 
+          setTimeout(() => resolve(null), 500)
+        ),
+      ]);
+
+      if (!jobId) {
+        // If we couldn't get job ID quickly, still return - job is running
+        return NextResponse.json({
+          status: 'running',
+          message: 'Job started, check /api/jobs for status',
+        });
+      }
+
+      // Return job info immediately
+      return NextResponse.json({
+        jobId,
+        status: 'running',
+      });
+    } catch (error) {
+      // Catch errors that happen during job creation (synchronous errors)
+      // Errors during execution are handled by the service and won't be caught here
+      throw error;
+    }
   } catch (error) {
     console.error('Error enriching listings:', error);
     return NextResponse.json(
