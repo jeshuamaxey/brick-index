@@ -74,14 +74,14 @@ export default function ApiUsagePage() {
     if (percentage >= 90) return 'text-destructive';
     if (percentage >= 75) return 'text-orange-500';
     if (percentage >= 50) return 'text-yellow-500';
-    return 'text-green-500';
+    return 'text-green-600';
   };
 
   const getStatusBgColor = (percentage: number): string => {
     if (percentage >= 90) return 'bg-destructive/10';
     if (percentage >= 75) return 'bg-orange-500/10';
     if (percentage >= 50) return 'bg-yellow-500/10';
-    return 'bg-green-500/10';
+    return 'bg-green-500/30';
   };
 
   if (loading && !data) {
