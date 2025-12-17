@@ -59,7 +59,10 @@ const DEFAULT_PROFILES: SnapshotProfileConfig[] = [
     name: 'broad-bulk-lots',
     keywords: ['lego bulk', 'lego job lot', 'lego lot'],
     params: {
-      entriesPerPage: 100,
+      entriesPerPage: 200, // Maximum per page
+      maxResults: 10000, // Maximum total results
+      enablePagination: true, // Always enabled
+      fieldgroups: 'EXTENDED', // Maximum data
       listingTypes: ['AuctionWithBIN', 'FixedPrice'],
       hideDuplicateItems: true,
     },
@@ -69,7 +72,10 @@ const DEFAULT_PROFILES: SnapshotProfileConfig[] = [
     name: 'niche-star-wars',
     keywords: ['lego star wars bulk lot'],
     params: {
-      entriesPerPage: 50,
+      entriesPerPage: 200, // Maximum per page
+      maxResults: 10000, // Maximum total results
+      enablePagination: true, // Always enabled
+      fieldgroups: 'EXTENDED', // Maximum data
       // Example category ID for LEGO; adjust to real IDs as desired.
       categoryId: '183447',
     },
@@ -79,7 +85,10 @@ const DEFAULT_PROFILES: SnapshotProfileConfig[] = [
     name: 'forced-empty',
     keywords: ['lego bulk asdfghjklqwerty'], // Intentionally odd to reduce chance of matches
     params: {
-      entriesPerPage: 10,
+      entriesPerPage: 200, // Maximum per page
+      maxResults: 10000, // Maximum total results
+      enablePagination: true, // Always enabled
+      fieldgroups: 'EXTENDED', // Maximum data
     },
     mode: 'empty',
   },
