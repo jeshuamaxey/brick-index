@@ -85,14 +85,20 @@ export const analyzeJob = inngest.createFunction(
           (analyzedListings || []).map((a) => a.listing_id)
         );
 
-        // Fetch active listings
-        const maxLimit = limit || 100;
-        const { data: allListings, error } = await supabaseServer
+        // Fetch all active listings (no limit by default)
+        // If limit is provided, use it; otherwise fetch all
+        let query = supabaseServer
           .schema('pipeline')
           .from('listings')
           .select('id')
-          .eq('status', 'active')
-          .limit(maxLimit * 2); // Fetch more to account for filtering
+          .eq('status', 'active');
+
+        // Only apply limit if explicitly provided
+        if (limit) {
+          query = query.limit(limit);
+        }
+
+        const { data: allListings, error } = await query;
 
         if (error) {
           throw new Error(`Failed to fetch listings: ${error.message}`);
@@ -107,8 +113,12 @@ export const analyzeJob = inngest.createFunction(
           (listing) => !analyzedListingIds.has(listing.id)
         );
 
-        // Take only up to the limit
-        return unanalyzedListings.slice(0, maxLimit).map((l) => l.id);
+        // If limit was provided, respect it; otherwise return all unanalyzed
+        if (limit) {
+          return unanalyzedListings.slice(0, limit).map((l) => l.id);
+        }
+
+        return unanalyzedListings.map((l) => l.id);
       });
 
       if (listingIdsToAnalyze.length === 0) {
