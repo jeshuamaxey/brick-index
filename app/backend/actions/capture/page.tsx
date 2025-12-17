@@ -182,8 +182,8 @@ export default function CapturePage() {
   const lastCaptureDate = status?.lastCaptureJob ? formatDateTime(status.lastCaptureJob) : null;
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6">Capture</h1>
+    <div className="p-8 bg-background">
+      <h1 className="text-2xl font-bold mb-6 text-foreground">Capture</h1>
 
       <Card>
         <CardHeader>
@@ -389,7 +389,7 @@ export default function CapturePage() {
             <CardTitle>Result</CardTitle>
           </CardHeader>
           <CardContent>
-            <pre className="text-sm overflow-auto">
+            <pre className="text-sm text-foreground overflow-auto">
               {JSON.stringify(result, null, 2)}
             </pre>
           </CardContent>

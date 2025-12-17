@@ -154,6 +154,7 @@ export class CaptureService {
           const { id, ...listingWithoutId } = listing;
           return {
             ...listingWithoutId,
+            job_id: jobId,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             first_seen_at: new Date().toISOString(),

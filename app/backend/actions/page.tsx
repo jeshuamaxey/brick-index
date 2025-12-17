@@ -29,8 +29,8 @@ const actions = [
 
 export default function ActionsPage() {
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6">Actions</h1>
+    <div className="p-8 bg-background">
+      <h1 className="text-2xl font-bold mb-6 text-foreground">Actions</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {actions.map((action) => (
