@@ -83,8 +83,8 @@ export default function AnalyzePage() {
   };
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6">Analyze</h1>
+    <div className="p-8 bg-background">
+      <h1 className="text-2xl font-bold mb-6 text-foreground">Analyze</h1>
 
       <Card>
         <CardHeader>
@@ -130,7 +130,7 @@ export default function AnalyzePage() {
             <CardTitle>Result</CardTitle>
           </CardHeader>
           <CardContent>
-            <pre className="text-sm overflow-auto">
+            <pre className="text-sm text-foreground overflow-auto">
               {JSON.stringify(result, null, 2)}
             </pre>
           </CardContent>
