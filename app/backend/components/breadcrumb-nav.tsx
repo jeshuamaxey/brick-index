@@ -18,9 +18,18 @@ const routeTitles: Record<string, string> = {
   resources: "Resources",
   jobs: "Jobs",
   listings: "Listings",
+  catalog: "Catalog",
   capture: "Capture",
   enrich: "Enrich",
   analyze: "Analyze",
+}
+
+// Helper function to capitalize text
+function capitalizeText(text: string): string {
+  return text
+    .split(/[-_\s]+/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
 }
 
 export function BreadcrumbNav() {
@@ -33,7 +42,7 @@ export function BreadcrumbNav() {
   const breadcrumbItems = pathSegments.map((segment, index) => {
     const href = "/" + pathSegments.slice(0, index + 1).join("/")
     const isLast = index === pathSegments.length - 1
-    const label = routeTitles[segment] || segment
+    const label = routeTitles[segment] || capitalizeText(segment)
 
     return {
       href,

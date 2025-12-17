@@ -410,6 +410,7 @@ export class EbayAdapter implements MarketplaceAdapter {
       first_seen_at: new Date().toISOString(),
       last_seen_at: new Date().toISOString(),
       status: isActive ? 'active' : 'expired',
+      job_id: null, // Will be set by capture service when inserting
       // Enrichment fields - will be populated by enrichment service
       enriched_at: null,
       enriched_raw_listing_id: null,

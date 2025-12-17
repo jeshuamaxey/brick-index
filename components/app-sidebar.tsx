@@ -37,6 +37,10 @@ const data = {
           title: "API Usage",
           url: "/backend/resources/api-usage",
         },
+        {
+          title: "Catalog",
+          url: "/backend/resources/catalog",
+        },
       ],
     },
     {

@@ -7,6 +7,129 @@ export type Json =
   | Json[]
 
 export type Database = {
+  catalog: {
+    Tables: {
+      csv_file_metadata: {
+        Row: {
+          content_length: number | null
+          created_at: string | null
+          etag: string | null
+          filename: string
+          last_checked_at: string | null
+          last_downloaded_at: string | null
+          last_modified: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          content_length?: number | null
+          created_at?: string | null
+          etag?: string | null
+          filename: string
+          last_checked_at?: string | null
+          last_downloaded_at?: string | null
+          last_modified?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          content_length?: number | null
+          created_at?: string | null
+          etag?: string | null
+          filename?: string
+          last_checked_at?: string | null
+          last_downloaded_at?: string | null
+          last_modified?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      lego_sets: {
+        Row: {
+          created_at: string | null
+          id: string
+          last_modified: string | null
+          name: string
+          num_parts: number | null
+          set_img_url: string | null
+          set_num: string
+          set_url: string | null
+          theme_id: number | null
+          updated_at: string | null
+          year: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          last_modified?: string | null
+          name: string
+          num_parts?: number | null
+          set_img_url?: string | null
+          set_num: string
+          set_url?: string | null
+          theme_id?: number | null
+          updated_at?: string | null
+          year?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          last_modified?: string | null
+          name?: string
+          num_parts?: number | null
+          set_img_url?: string | null
+          set_num?: string
+          set_url?: string | null
+          theme_id?: number | null
+          updated_at?: string | null
+          year?: number | null
+        }
+        Relationships: []
+      }
+      themes: {
+        Row: {
+          created_at: string | null
+          id: number
+          name: string
+          parent_id: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id: number
+          name: string
+          parent_id?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: number
+          name?: string
+          parent_id?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "themes_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "themes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -34,11 +157,54 @@ export type Database = {
   }
   pipeline: {
     Tables: {
+      ebay_api_usage: {
+        Row: {
+          app_id: string
+          called_at: string
+          created_at: string
+          endpoint_type: Database["pipeline"]["Enums"]["ebay_endpoint_type"]
+          error_message: string | null
+          id: string
+          rate_limit_limit: number | null
+          rate_limit_remaining: number | null
+          rate_limit_reset: string | null
+          response_headers: Json | null
+          response_status: number | null
+        }
+        Insert: {
+          app_id: string
+          called_at?: string
+          created_at?: string
+          endpoint_type: Database["pipeline"]["Enums"]["ebay_endpoint_type"]
+          error_message?: string | null
+          id?: string
+          rate_limit_limit?: number | null
+          rate_limit_remaining?: number | null
+          rate_limit_reset?: string | null
+          response_headers?: Json | null
+          response_status?: number | null
+        }
+        Update: {
+          app_id?: string
+          called_at?: string
+          created_at?: string
+          endpoint_type?: Database["pipeline"]["Enums"]["ebay_endpoint_type"]
+          error_message?: string | null
+          id?: string
+          rate_limit_limit?: number | null
+          rate_limit_remaining?: number | null
+          rate_limit_reset?: string | null
+          response_headers?: Json | null
+          response_status?: number | null
+        }
+        Relationships: []
+      }
       jobs: {
         Row: {
           completed_at: string | null
           error_message: string | null
           id: string
+          last_update: string | null
           listings_found: number | null
           listings_new: number | null
           listings_updated: number | null
@@ -46,12 +212,15 @@ export type Database = {
           metadata: Json | null
           started_at: string | null
           status: string
+          timeout_at: string | null
           type: Database["pipeline"]["Enums"]["job_type"]
+          updated_at: string | null
         }
         Insert: {
           completed_at?: string | null
           error_message?: string | null
           id?: string
+          last_update?: string | null
           listings_found?: number | null
           listings_new?: number | null
           listings_updated?: number | null
@@ -59,12 +228,15 @@ export type Database = {
           metadata?: Json | null
           started_at?: string | null
           status: string
+          timeout_at?: string | null
           type: Database["pipeline"]["Enums"]["job_type"]
+          updated_at?: string | null
         }
         Update: {
           completed_at?: string | null
           error_message?: string | null
           id?: string
+          last_update?: string | null
           listings_found?: number | null
           listings_new?: number | null
           listings_updated?: number | null
@@ -72,7 +244,9 @@ export type Database = {
           metadata?: Json | null
           started_at?: string | null
           status?: string
+          timeout_at?: string | null
           type?: Database["pipeline"]["Enums"]["job_type"]
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -143,6 +317,7 @@ export type Database = {
           id: string
           image_urls: string[] | null
           item_location: Json | null
+          job_id: string | null
           last_seen_at: string | null
           location: string | null
           marketplace: string
@@ -171,6 +346,7 @@ export type Database = {
           id?: string
           image_urls?: string[] | null
           item_location?: Json | null
+          job_id?: string | null
           last_seen_at?: string | null
           location?: string | null
           marketplace: string
@@ -199,6 +375,7 @@ export type Database = {
           id?: string
           image_urls?: string[] | null
           item_location?: Json | null
+          job_id?: string | null
           last_seen_at?: string | null
           location?: string | null
           marketplace?: string
@@ -217,6 +394,13 @@ export type Database = {
             columns: ["enriched_raw_listing_id"]
             isOneToOne: false
             referencedRelation: "raw_listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "listings_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
             referencedColumns: ["id"]
           },
           {
@@ -254,10 +438,36 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_ebay_api_usage_stats: {
+        Args: {
+          p_app_id: string
+          p_hours?: number
+        }
+        Returns: {
+          endpoint_type: Database["pipeline"]["Enums"]["ebay_endpoint_type"]
+          total_calls: number
+          successful_calls: number
+          failed_calls: number
+          calls_in_last_24h: number
+          limit_per_day: number
+          percentage_used: number
+        }[]
+      }
+      mark_stale_jobs_as_timed_out: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          jobs_updated: number
+          job_ids: string[]
+        }[]
+      }
     }
     Enums: {
-      job_type: "ebay_refresh_listings" | "ebay_enrich_listings"
+      ebay_endpoint_type: "item_summary_search" | "get_item"
+      job_type:
+        | "ebay_refresh_listings"
+        | "ebay_enrich_listings"
+        | "analyze_listings"
+        | "lego_catalog_refresh"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -406,7 +616,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_ebay_api_usage_stats: {
+        Args: {
+          p_app_id: string
+          p_hours?: number
+        }
+        Returns: {
+          endpoint_type: Database["pipeline"]["Enums"]["ebay_endpoint_type"]
+          total_calls: number
+          successful_calls: number
+          failed_calls: number
+          calls_in_last_24h: number
+          limit_per_day: number
+          percentage_used: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
