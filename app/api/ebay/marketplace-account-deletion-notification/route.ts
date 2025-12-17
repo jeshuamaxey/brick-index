@@ -14,7 +14,7 @@ import {
 // - EBAY_CLIENT_SECRET: eBay OAuth client secret
 // - EBAY_DEV_ID: (optional) eBay developer ID
 // - EBAY_REDIRECT_URI: (optional) eBay redirect URI for the app
-// - EBAY_ENVIRONMENT: 'production' (default) or 'sandbox'
+// - EBAY_ENVIRONMENT: 'PRODUCTION' (default) or 'SANDBOX' (must be uppercase)
 
 const VERIFICATION_TOKEN = process.env.EBAY_MARKETPLACE_DELETION_VERIFICATION_TOKEN;
 const CALLBACK_URL = process.env.EBAY_MARKETPLACE_DELETION_CALLBACK_URL;
@@ -25,9 +25,9 @@ const EBAY_REDIRECT_URI = process.env.EBAY_REDIRECT_URI;
 type EbayNotificationEnvironment = 'PRODUCTION' | 'SANDBOX';
 
 function getEnvironmentKey(): EbayNotificationEnvironment {
-  const raw = (process.env.EBAY_ENVIRONMENT ?? '').toUpperCase();
+  const raw = process.env.EBAY_ENVIRONMENT ?? 'PRODUCTION';
   if (raw === 'SANDBOX') return 'SANDBOX';
-  // Default to PRODUCTION for any other value (including empty / 'production')
+  // Default to PRODUCTION for any other value (including empty)
   return 'PRODUCTION';
 }
 

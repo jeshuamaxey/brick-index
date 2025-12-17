@@ -106,8 +106,10 @@ function extractEnrichmentFields(response: EbayGetItemResponse): Record<string, 
   return fields;
 }
 
+import { INNGEST_FUNCTION_IDS } from './registry';
+
 export const enrichJob = inngest.createFunction(
-  { id: 'enrich-job' },
+  { id: INNGEST_FUNCTION_IDS.ENRICH_JOB },
   { event: 'job/enrich.triggered' },
   async ({ event, step }) => {
     const { marketplace, limit, delayMs = 200 } = event.data;

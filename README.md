@@ -43,7 +43,7 @@ A backend system to capture, analyze, and discover bulk LEGO job-lot listings fr
    # eBay API
    EBAY_APP_ID=your_ebay_app_id
    EBAY_CLIENT_SECRET=your_ebay_client_secret
-   EBAY_ENVIRONMENT=production  # or 'sandbox' for testing
+   EBAY_ENVIRONMENT=PRODUCTION  # or 'SANDBOX' for testing (must be uppercase)
 
    # Resend
    RESEND_API_KEY=your_resend_api_key

@@ -19,8 +19,10 @@ interface AnalyzeJobEvent {
   };
 }
 
+import { INNGEST_FUNCTION_IDS } from './registry';
+
 export const analyzeJob = inngest.createFunction(
-  { id: 'analyze-job' },
+  { id: INNGEST_FUNCTION_IDS.ANALYZE_JOB },
   { event: 'job/analyze.triggered' },
   async ({ event, step }) => {
     const { listingIds, limit } = event.data;

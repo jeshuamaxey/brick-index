@@ -112,7 +112,7 @@ The script:
   - Forced-empty successful responses.
   - Synthetic error responses (no live API call).
 - Writes one JSON file per profile plus an updated `_index.json` (which includes item counts for each snapshot).
-- **Note**: The script automatically sets `EBAY_ENVIRONMENT=production` to ensure snapshots are always fetched from production.
+- **Note**: The script automatically sets `EBAY_ENVIRONMENT=PRODUCTION` to ensure snapshots are always fetched from production.
 
 ### Step 2: Enrich Snapshots (Optional)
 
