@@ -3,6 +3,8 @@
 import type { Marketplace, Listing } from '@/lib/types';
 import type { MarketplaceAdapter } from './base-adapter';
 import { getEbayAccessToken } from '@/lib/ebay/oauth-token-service';
+import { EbayApiUsageTracker } from '@/lib/ebay/api-usage-tracker';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 interface EbayBrowseApiResponse {
   itemSummaries?: Array<{
@@ -91,6 +93,8 @@ export class EbayAdapter implements MarketplaceAdapter {
   private oauthToken?: string;
   private defaultMarketplaceId: string;
   private browseBaseUrl: string;
+  private usageTracker: EbayApiUsageTracker | null = null;
+  private trackerInitialized: boolean = false;
 
   constructor(appId: string, oauthToken?: string) {
     if (!appId) {
@@ -116,6 +120,28 @@ export class EbayAdapter implements MarketplaceAdapter {
       process.env.EBAY_MARKETPLACE_ID || 'EBAY_US';
   }
 
+  /**
+   * Initialize usage tracker lazily
+   * Uses appropriate Supabase client based on context (API route vs script)
+   */
+  private async ensureUsageTracker(): Promise<EbayApiUsageTracker | null> {
+    if (this.trackerInitialized) {
+      return this.usageTracker;
+    }
+
+    try {
+      const supabase = await EbayApiUsageTracker.getSupabaseClient();
+      this.usageTracker = new EbayApiUsageTracker(supabase);
+      this.trackerInitialized = true;
+      return this.usageTracker;
+    } catch (error) {
+      console.warn('Failed to initialize API usage tracker:', error);
+      // Don't throw - tracking failures shouldn't break API calls
+      this.trackerInitialized = true;
+      return null;
+    }
+  }
+
   getMarketplace(): Marketplace {
     return 'ebay';
   }
@@ -132,6 +158,34 @@ export class EbayAdapter implements MarketplaceAdapter {
     // Fetch token automatically using OAuth service
     this.oauthToken = await getEbayAccessToken();
     return this.oauthToken;
+  }
+
+  /**
+   * Track an API call (fire-and-forget)
+   */
+  private async trackApiCall(
+    response: Response,
+    endpointType: 'item_summary_search' | 'get_item'
+  ): Promise<void> {
+    try {
+      const tracker = await this.ensureUsageTracker();
+      if (!tracker) {
+        return; // Tracker not available, skip tracking
+      }
+
+      const responseHeaders = EbayApiUsageTracker.headersToObject(response.headers);
+      await tracker.recordApiCall({
+        app_id: this.appId,
+        endpoint_type: endpointType,
+        called_at: new Date(),
+        response_status: response.status,
+        response_headers: responseHeaders,
+        error_message: !response.ok ? `${response.status} ${response.statusText}` : undefined,
+      });
+    } catch (error) {
+      // Silently fail - tracking should never break API calls
+      // Error already logged in ensureUsageTracker if needed
+    }
   }
 
   /**
@@ -192,6 +246,12 @@ export class EbayAdapter implements MarketplaceAdapter {
     const response = await fetch(url.toString(), {
       method: 'GET',
       headers,
+    });
+
+    // Track API usage (track before error handling so we record failed calls too)
+    // Use fire-and-forget to avoid blocking the API call
+    this.trackApiCall(response, 'item_summary_search').catch((err) => {
+      console.warn('Failed to track API usage:', err);
     });
 
     if (!response.ok) {
@@ -396,6 +456,12 @@ export class EbayAdapter implements MarketplaceAdapter {
 
       const response = await fetch(url, {
         headers,
+      });
+
+      // Track API usage (track before error handling so we record failed calls too)
+      // Use fire-and-forget to avoid blocking the API call
+      this.trackApiCall(response, 'get_item').catch((err) => {
+        console.warn('Failed to track API usage:', err);
       });
 
       if (!response.ok) {

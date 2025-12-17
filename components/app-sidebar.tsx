@@ -33,6 +33,10 @@ const data = {
           title: "Listings",
           url: "/backend/resources/listings",
         },
+        {
+          title: "API Usage",
+          url: "/backend/resources/api-usage",
+        },
       ],
     },
     {
