@@ -43,25 +43,6 @@ CREATE TABLE catalog.csv_file_metadata (
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
--- Catalog refresh jobs tracking
-CREATE TABLE catalog.refresh_jobs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
-  files_checked INTEGER DEFAULT 0, -- Total CSV files checked
-  files_changed INTEGER DEFAULT 0, -- Files that had updates
-  files_unchanged INTEGER DEFAULT 0, -- Files skipped (304 responses)
-  sets_found INTEGER DEFAULT 0, -- Total sets in CSV
-  sets_new INTEGER DEFAULT 0, -- New sets added
-  sets_updated INTEGER DEFAULT 0, -- Existing sets updated
-  themes_found INTEGER DEFAULT 0,
-  themes_new INTEGER DEFAULT 0,
-  themes_updated INTEGER DEFAULT 0,
-  started_at TIMESTAMP DEFAULT NOW(),
-  completed_at TIMESTAMP,
-  error_message TEXT,
-  metadata JSONB DEFAULT '{}'::jsonb -- Additional job data
-);
-
 -- Create indexes for lego_sets
 CREATE INDEX idx_lego_sets_set_num ON catalog.lego_sets(set_num);
 CREATE INDEX idx_lego_sets_year ON catalog.lego_sets(year);
@@ -74,10 +55,6 @@ CREATE INDEX idx_themes_parent_id ON catalog.themes(parent_id);
 -- Create index for csv_file_metadata (filename is already primary key, but add index for lookups)
 -- Note: Primary key already creates an index, but we'll add one for last_checked_at queries
 CREATE INDEX idx_csv_file_metadata_last_checked ON catalog.csv_file_metadata(last_checked_at);
-
--- Create indexes for refresh_jobs
-CREATE INDEX idx_refresh_jobs_status ON catalog.refresh_jobs(status);
-CREATE INDEX idx_refresh_jobs_started_at ON catalog.refresh_jobs(started_at DESC);
 
 -- Function to automatically update updated_at timestamp (in catalog schema)
 CREATE OR REPLACE FUNCTION catalog.update_updated_at_column()
@@ -115,4 +92,3 @@ COMMENT ON SCHEMA catalog IS 'Schema for LEGO sets catalog data from Rebrickable
 COMMENT ON TABLE catalog.lego_sets IS 'Official LEGO sets catalog with metadata from Rebrickable';
 COMMENT ON TABLE catalog.themes IS 'LEGO theme hierarchy from Rebrickable';
 COMMENT ON TABLE catalog.csv_file_metadata IS 'Metadata for CSV files to enable change detection via HTTP conditional requests';
-COMMENT ON TABLE catalog.refresh_jobs IS 'Tracking table for catalog refresh operations';

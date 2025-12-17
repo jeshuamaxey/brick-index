@@ -15,7 +15,6 @@ export type SearchResult = Database['public']['Tables']['search_results']['Row']
 // Catalog types
 export type LegoSet = Database['catalog']['Tables']['lego_sets']['Row'];
 export type Theme = Database['catalog']['Tables']['themes']['Row'];
-export type CatalogRefreshJob = Database['catalog']['Tables']['refresh_jobs']['Row'];
 export type CsvFileMetadata = Database['catalog']['Tables']['csv_file_metadata']['Row'];
 
 // Database enum types

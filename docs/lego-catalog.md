@@ -101,18 +101,18 @@ sequenceDiagram
 
 ### Job Tracking
 
-Catalog refresh operations are tracked using the unified job system:
+Catalog refresh operations are tracked using the unified job system in `pipeline.jobs`:
 
 - **Job Type**: `lego_catalog_refresh`
 - **Timeout**: 60 minutes
-- **Statistics Tracked**:
+- **Statistics Tracked** (stored in `metadata` JSONB field):
   - `files_checked` - Total CSV files checked
   - `files_changed` - Files that had updates
   - `files_unchanged` - Files skipped (304 responses)
   - `sets_found`, `sets_new`, `sets_updated`
   - `themes_found`, `themes_new`, `themes_updated`
 
-Statistics are stored in the job's `metadata` JSONB field.
+All job tracking uses the unified `pipeline.jobs` table - no separate catalog-specific job table is needed.
 
 ### API Endpoints
 
