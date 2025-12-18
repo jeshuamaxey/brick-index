@@ -90,17 +90,13 @@ const columns: ColumnDef<ListingRow>[] = [
     },
     cell: ({ row }) => {
       const title = row.getValue('title') as string;
-      const url = row.original.url;
       return (
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-foreground hover:underline max-w-[300px] block truncate"
+        <span
+          className="text-xs text-foreground max-w-[300px] block truncate"
           title={title}
         >
           {truncate(title, 50)}
-        </a>
+        </span>
       );
     },
   },
@@ -235,9 +231,10 @@ const columns: ColumnDef<ListingRow>[] = [
 
 interface DataTableProps {
   data: ListingRow[];
+  onRowClick?: (listing: ListingRow) => void;
 }
 
-export function DataTable({ data }: DataTableProps) {
+export function DataTable({ data, onRowClick }: DataTableProps) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'created_at', desc: true },
   ]);
@@ -285,7 +282,10 @@ export function DataTable({ data }: DataTableProps) {
                   <tr
                     key={row.id}
                     data-state={row.getIsSelected() && 'selected'}
-                    className="h-8 hover:bg-foreground/5 border-b transition-colors"
+                    className={`h-8 hover:bg-foreground/5 border-b transition-colors ${
+                      onRowClick ? 'cursor-pointer' : ''
+                    }`}
+                    onClick={() => onRowClick?.(row.original)}
                   >
                     {row.getVisibleCells().map((cell) => (
                       <td

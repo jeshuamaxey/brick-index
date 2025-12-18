@@ -6,6 +6,13 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, Copy, X } from 'lucide-react';
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import { JobDetailPanel } from '@/components/jobs/job-detail-panel';
+import {
   DataTable,
   DataTableHeader,
   DataTableHeaderRow,
@@ -40,6 +47,8 @@ export default function JobsPage() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
 
   const fetchJobs = async (silent = false, currentPage = page) => {
     try {
@@ -154,6 +163,12 @@ export default function JobsPage() {
     }
   };
 
+  const handleJobClick = (job: Job) => {
+    setSelectedJob(job);
+    setIsPanelOpen(true);
+  };
+
+
   return (
     <div className="flex flex-col h-full bg-background text-foreground p-4">
       {/* Header section - fixed */}
@@ -223,25 +238,13 @@ export default function JobsPage() {
                         Type
                       </DataTableHeaderCell>
                       <DataTableHeaderCell className="px-2 py-2 text-xs uppercase tracking-wider w-20">
-                        Marketplace
-                      </DataTableHeaderCell>
-                      <DataTableHeaderCell className="px-2 py-2 text-xs uppercase tracking-wider w-20">
                         Status
                       </DataTableHeaderCell>
                       <DataTableHeaderCell className="px-2 py-2 text-xs uppercase tracking-wider w-40">
                         Progress
                       </DataTableHeaderCell>
-                      <DataTableHeaderCell className="px-2 py-2 text-xs uppercase tracking-wider w-28">
-                        Started
-                      </DataTableHeaderCell>
-                      <DataTableHeaderCell className="px-2 py-2 text-xs uppercase tracking-wider w-28">
-                        Completed
-                      </DataTableHeaderCell>
-                      <DataTableHeaderCell className="px-2 py-2 text-xs uppercase tracking-wider w-24">
-                        Results
-                      </DataTableHeaderCell>
-                      <DataTableHeaderCell className="px-2 py-2 text-xs uppercase tracking-wider w-32">
-                        Error
+                      <DataTableHeaderCell className="px-2 py-2 text-xs uppercase tracking-wider w-40">
+                        Timestamps
                       </DataTableHeaderCell>
                       <DataTableHeaderCell className="px-2 py-2 text-xs uppercase tracking-wider w-20">
                         Actions
@@ -250,13 +253,16 @@ export default function JobsPage() {
                   </DataTableHeader>
                   <DataTableBody>
                     {jobs.length === 0 ? (
-                      <DataTableEmpty colSpan={9} message="No jobs found" />
+                      <DataTableEmpty colSpan={6} message="No jobs found" />
                     ) : (
                       jobs.map((job) => (
-                        <DataTableRow key={job.id}>
+                        <DataTableRow key={job.id} onClick={() => handleJobClick(job)}>
                           <DataTableCell className="px-2 py-2 text-xs font-mono text-foreground/70 whitespace-nowrap">
                             <button
-                              onClick={() => copyToClipboard(job.id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                copyToClipboard(job.id);
+                              }}
                               className="hover:text-foreground flex items-center gap-1 group cursor-pointer"
                               title="Click to copy full ID"
                             >
@@ -268,9 +274,6 @@ export default function JobsPage() {
                             <span className="truncate block" title={getTypeDisplay(job.type)}>
                               {getTypeDisplay(job.type)}
                             </span>
-                          </DataTableCell>
-                          <DataTableCell className="px-2 py-2 text-xs text-foreground whitespace-nowrap">
-                            {job.marketplace}
                           </DataTableCell>
                           <DataTableCell className="px-2 py-2 text-xs whitespace-nowrap">
                             <span
@@ -301,50 +304,23 @@ export default function JobsPage() {
                               <span className="text-foreground/40">—</span>
                             )}
                           </DataTableCell>
-                          <DataTableCell className="px-2 py-2 text-xs text-foreground/70 whitespace-nowrap">
-                            {formatDate(job.started_at)}
-                          </DataTableCell>
-                          <DataTableCell className="px-2 py-2 text-xs text-foreground/70 whitespace-nowrap">
-                            {formatDate(job.completed_at)}
-                          </DataTableCell>
                           <DataTableCell className="px-2 py-2 text-xs text-foreground/70">
-                            {job.type.includes('refresh') ? (
-                              <div className="space-y-0.5 text-xs leading-tight">
-                                <div>F: {job.listings_found}</div>
-                                <div>N: {job.listings_new}</div>
-                                <div>U: {job.listings_updated}</div>
-                              </div>
-                            ) : job.type.includes('enrich') ? (
-                              <div className="space-y-0.5 text-xs leading-tight">
-                                <div>T: {job.listings_found}</div>
-                                <div>S: {job.listings_new}</div>
-                                <div>F: {job.listings_updated}</div>
-                              </div>
-                            ) : job.type.includes('analyze') ? (
-                              <div className="space-y-0.5 text-xs leading-tight">
-                                <div>T: {job.listings_found}</div>
-                                <div>A: {job.listings_new}</div>
-                                <div>F: {job.listings_updated}</div>
-                              </div>
-                            ) : (
-                              <div className="text-xs">N/A</div>
-                            )}
-                          </DataTableCell>
-                          <DataTableCell className="px-2 py-2 text-xs">
-                            {job.error_message ? (
-                              <span className="text-foreground/80 text-xs truncate block" title={job.error_message}>
-                                {job.error_message}
-                              </span>
-                            ) : (
-                              <span className="text-foreground/40">—</span>
-                            )}
+                            <div className="space-y-0.5 text-xs leading-tight">
+                              <div>Started: {formatDate(job.started_at)}</div>
+                              {job.completed_at && (
+                                <div>Completed: {formatDate(job.completed_at)}</div>
+                              )}
+                            </div>
                           </DataTableCell>
                           <DataTableCell className="px-2 py-2 text-xs">
                             {job.status === 'running' && (
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => handleCancelJob(job.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCancelJob(job.id);
+                                }}
                                 className="h-6 px-2 text-xs"
                               >
                                 <X className="h-3 w-3 mr-1" />
@@ -391,6 +367,51 @@ export default function JobsPage() {
             </>
           )}
       </div>
+
+      {/* Job Detail Panel */}
+      <Sheet
+        open={isPanelOpen}
+        onOpenChange={(open) => {
+          setIsPanelOpen(open);
+          if (!open) {
+            // Clear selected job after animation completes
+            setTimeout(() => setSelectedJob(null), 300);
+          }
+        }}
+      >
+        <SheetContent
+          side="right"
+          className="w-[80%] sm:w-1/2 sm:max-w-none overflow-y-auto"
+        >
+          {selectedJob && (
+            <>
+              <SheetHeader>
+                <SheetTitle>Job Details</SheetTitle>
+              </SheetHeader>
+              <div className="mt-6">
+                <JobDetailPanel
+                  job={selectedJob}
+                  onCancelJob={async (jobId) => {
+                    await handleCancelJob(jobId);
+                    // Refresh jobs list
+                    await fetchJobs(false, page);
+                    // Fetch updated job details
+                    try {
+                      const response = await fetch(`/api/capture/status/${jobId}`);
+                      if (response.ok) {
+                        const updatedJob = await response.json();
+                        setSelectedJob(updatedJob);
+                      }
+                    } catch (err) {
+                      console.error('Failed to refresh job details:', err);
+                    }
+                  }}
+                />
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
