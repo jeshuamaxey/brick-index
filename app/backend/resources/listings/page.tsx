@@ -9,12 +9,21 @@ import { ListingsFilters } from '@/components/listings/listings-filters';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import { ListingDetailPanel } from '@/components/listings/listing-detail-panel';
 
 const PAGE_SIZE = 50;
 
 export default function ListingsPage() {
   const [filters, setFilters] = useState<ListingFilters>({});
   const [page, setPage] = useState(0);
+  const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
   
   const pagination: PaginationParams = {
     limit: PAGE_SIZE,
@@ -34,6 +43,11 @@ export default function ListingsPage() {
 
   const handlePageChange = (newPage: number) => {
     setPage(Math.max(0, Math.min(newPage, totalPages - 1)));
+  };
+
+  const handleRowClick = (listing: ListingRow) => {
+    setSelectedListingId(listing.id);
+    setIsPanelOpen(true);
   };
 
   if (error) {
@@ -90,7 +104,7 @@ export default function ListingsPage() {
         {!isLoading && data && (
           <>
             <div className="flex-1 min-h-0">
-              <DataTable data={listings} />
+              <DataTable data={listings} onRowClick={handleRowClick} />
             </div>
 
             {/* Pagination - fixed at bottom */}
@@ -138,6 +152,34 @@ export default function ListingsPage() {
           </div>
         )}
       </div>
+
+      {/* Listing Detail Panel */}
+      <Sheet
+        open={isPanelOpen}
+        onOpenChange={(open) => {
+          setIsPanelOpen(open);
+          if (!open) {
+            // Clear selected listing after animation completes
+            setTimeout(() => setSelectedListingId(null), 300);
+          }
+        }}
+      >
+        <SheetContent
+          side="right"
+          className="w-[80%] sm:w-1/2 sm:max-w-none overflow-y-auto"
+        >
+          {selectedListingId && (
+            <>
+              <SheetHeader>
+                <SheetTitle>Listing Details</SheetTitle>
+              </SheetHeader>
+              <div className="mt-6">
+                <ListingDetailPanel listingId={selectedListingId} />
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
