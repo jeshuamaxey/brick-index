@@ -6,10 +6,11 @@ import { captureJob } from './functions/capture-job';
 import { materializeListingsJob } from './functions/materialize-listings-job';
 import { enrichJob } from './functions/enrich-job';
 import { analyzeJob } from './functions/analyze-job';
+import { catalogRefreshJob } from './functions/catalog-refresh-job';
 import { handleJobCancellation } from './functions/handle-job-cancellation';
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [captureJob, materializeListingsJob, enrichJob, analyzeJob, handleJobCancellation],
+  functions: [captureJob, materializeListingsJob, enrichJob, analyzeJob, catalogRefreshJob, handleJobCancellation],
 });
 
