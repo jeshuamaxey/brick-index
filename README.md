@@ -33,28 +33,14 @@ A backend system to capture, analyze, and discover bulk LEGO job-lot listings fr
    npm install
    ```
 
-3. Set up environment variables (create `.env.local`):
-   ```env
-   # Supabase
-   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-   SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
-
-   # eBay API
-   EBAY_APP_ID=your_ebay_app_id
-   EBAY_CLIENT_SECRET=your_ebay_client_secret
-   EBAY_ENVIRONMENT=PRODUCTION  # or 'SANDBOX' for testing (must be uppercase)
-
-   # Resend
-   RESEND_API_KEY=your_resend_api_key
-   RESEND_FROM_EMAIL=noreply@yourdomain.com
-
-   # App
-   NEXT_PUBLIC_APP_URL=http://localhost:3000
+3. Set up environment variables:
+   - Copy `env.example` to `.env.local`:
+     ```bash
+     cp env.example .env.local
+     ```
+   - Fill in your actual values in `.env.local`
    
-   # Optional: Cron secret for job cleanup endpoint
-   CRON_SECRET=your-secret-key-here
-   ```
+   See `env.example` for all required and optional environment variables.
 
 4. Initialize Supabase locally:
    ```bash
@@ -66,7 +52,13 @@ A backend system to capture, analyze, and discover bulk LEGO job-lot listings fr
    npx supabase db reset
    ```
 
-6. Start the development server:
+6. Start the Inngest dev server (required for job orchestration):
+   ```bash
+   npm run dev:inngest
+   ```
+   Keep this terminal open - the Inngest dev server needs to stay running.
+
+7. Start the development server (in a separate terminal):
    ```bash
    npm run dev
    ```
