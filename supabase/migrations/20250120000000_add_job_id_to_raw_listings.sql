@@ -12,3 +12,4 @@ COMMENT ON COLUMN pipeline.raw_listings.job_id IS 'Reference to the capture job 
 
 -- Add materialize_listings job type to enum
 ALTER TYPE pipeline.job_type ADD VALUE IF NOT EXISTS 'ebay_materialize_listings';
+

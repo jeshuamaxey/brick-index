@@ -14,3 +14,4 @@ export const inngest = new Inngest({
   name: 'Bricks Pipeline',
   eventKey: getInngestConfig().eventKey,
 });
+

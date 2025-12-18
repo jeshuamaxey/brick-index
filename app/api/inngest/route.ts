@@ -12,3 +12,4 @@ export const { GET, POST, PUT } = serve({
   client: inngest,
   functions: [captureJob, materializeListingsJob, enrichJob, analyzeJob, handleJobCancellation],
 });
+

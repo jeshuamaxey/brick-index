@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, X } from 'lucide-react';
 import {
   DataTable,
   DataTableHeader,
@@ -123,6 +123,37 @@ export default function JobsPage() {
     setPage(validPage);
   };
 
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      // You could add a toast notification here if desired
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
+    }
+  };
+
+  const handleCancelJob = async (jobId: string) => {
+    if (!confirm('Are you sure you want to cancel this job?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/cancel`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to cancel job');
+      }
+
+      // Refresh jobs to show updated status
+      await fetchJobs(false, page);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to cancel job');
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-background text-foreground p-4">
       {/* Header section - fixed */}
@@ -204,9 +235,6 @@ export default function JobsPage() {
                         Started
                       </DataTableHeaderCell>
                       <DataTableHeaderCell className="px-2 py-2 text-xs uppercase tracking-wider w-28">
-                        Updated
-                      </DataTableHeaderCell>
-                      <DataTableHeaderCell className="px-2 py-2 text-xs uppercase tracking-wider w-28">
                         Completed
                       </DataTableHeaderCell>
                       <DataTableHeaderCell className="px-2 py-2 text-xs uppercase tracking-wider w-24">
@@ -215,16 +243,26 @@ export default function JobsPage() {
                       <DataTableHeaderCell className="px-2 py-2 text-xs uppercase tracking-wider w-32">
                         Error
                       </DataTableHeaderCell>
+                      <DataTableHeaderCell className="px-2 py-2 text-xs uppercase tracking-wider w-20">
+                        Actions
+                      </DataTableHeaderCell>
                     </DataTableHeaderRow>
                   </DataTableHeader>
                   <DataTableBody>
                     {jobs.length === 0 ? (
-                      <DataTableEmpty colSpan={10} message="No jobs found" />
+                      <DataTableEmpty colSpan={9} message="No jobs found" />
                     ) : (
                       jobs.map((job) => (
                         <DataTableRow key={job.id}>
                           <DataTableCell className="px-2 py-2 text-xs font-mono text-foreground/70 whitespace-nowrap">
-                            {truncateId(job.id)}
+                            <button
+                              onClick={() => copyToClipboard(job.id)}
+                              className="hover:text-foreground flex items-center gap-1 group cursor-pointer"
+                              title="Click to copy full ID"
+                            >
+                              <span>{truncateId(job.id)}</span>
+                              <Copy className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </button>
                           </DataTableCell>
                           <DataTableCell className="px-2 py-2 text-xs text-foreground">
                             <span className="truncate block" title={getTypeDisplay(job.type)}>
@@ -267,15 +305,6 @@ export default function JobsPage() {
                             {formatDate(job.started_at)}
                           </DataTableCell>
                           <DataTableCell className="px-2 py-2 text-xs text-foreground/70 whitespace-nowrap">
-                            {job.updated_at ? (
-                              <div className="text-xs">
-                                {formatDate(job.updated_at)}
-                              </div>
-                            ) : (
-                              <span className="text-foreground/40">—</span>
-                            )}
-                          </DataTableCell>
-                          <DataTableCell className="px-2 py-2 text-xs text-foreground/70 whitespace-nowrap">
                             {formatDate(job.completed_at)}
                           </DataTableCell>
                           <DataTableCell className="px-2 py-2 text-xs text-foreground/70">
@@ -308,6 +337,19 @@ export default function JobsPage() {
                               </span>
                             ) : (
                               <span className="text-foreground/40">—</span>
+                            )}
+                          </DataTableCell>
+                          <DataTableCell className="px-2 py-2 text-xs">
+                            {job.status === 'running' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleCancelJob(job.id)}
+                                className="h-6 px-2 text-xs"
+                              >
+                                <X className="h-3 w-3 mr-1" />
+                                Cancel
+                              </Button>
                             )}
                           </DataTableCell>
                         </DataTableRow>

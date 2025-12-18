@@ -368,3 +368,4 @@ export const captureJob = inngest.createFunction(
 3. **Progress granularity**: More detailed progress updates per page
 4. **Rate limiting**: Better rate limit handling with exponential backoff
 5. **Adaptive batching**: Adjust batch sizes based on item size to stay under 4MB
+

@@ -17,6 +17,14 @@ export async function POST(request: NextRequest) {
       ebayParams?: EbaySearchParams;
     } = body;
 
+    // Validate keywords (required)
+    if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
+      return NextResponse.json(
+        { error: 'keywords is required and must be a non-empty array' },
+        { status: 400 }
+      );
+    }
+
     // Validate marketplace
     if (marketplace !== 'ebay') {
       return NextResponse.json(
@@ -38,13 +46,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Send Inngest event to trigger capture job
-    const searchKeywords = keywords || ['lego bulk', 'lego job lot', 'lego lot'];
     
     await inngest.send({
       name: 'job/capture.triggered',
       data: {
         marketplace,
-        keywords: searchKeywords,
+        keywords,
         ebayParams,
       },
     });

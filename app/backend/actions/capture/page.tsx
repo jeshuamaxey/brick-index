@@ -15,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import type { EbaySearchParams } from '@/lib/capture/marketplace-adapters/ebay-adapter';
 
 interface StatusData {
   lastCaptureJob: string | null;
@@ -28,17 +29,6 @@ interface StatusData {
   };
 }
 
-interface EbaySearchParams {
-  entriesPerPage?: number;
-  listingTypes?: string[];
-  hideDuplicateItems?: boolean;
-  categoryId?: string;
-  marketplaceId?: string;
-  enablePagination?: boolean;
-  maxResults?: number;
-  fieldgroups?: string;
-}
-
 export default function CapturePage() {
   const [loadingAction, setLoadingAction] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -47,7 +37,7 @@ export default function CapturePage() {
   const [loadingStatus, setLoadingStatus] = useState(true);
 
   // Form state
-  const [keywords, setKeywords] = useState('lego bulk, lego job lot, lego lot');
+  const [keywords, setKeywords] = useState('');
   const [entriesPerPage, setEntriesPerPage] = useState('200');
   const [useEntriesPerPage, setUseEntriesPerPage] = useState(true);
   const [enablePagination, setEnablePagination] = useState(true);
@@ -181,11 +171,71 @@ export default function CapturePage() {
 
   const lastCaptureDate = status?.lastCaptureJob ? formatDateTime(status.lastCaptureJob) : null;
 
+  // Generate JSON payload for Inngest
+  const generateInngestPayload = () => {
+    const keywordArray = keywords
+      .split(',')
+      .map((k) => k.trim())
+      .filter((k) => k.length > 0);
+
+    const ebayParams: EbaySearchParams = {};
+
+    if (useEntriesPerPage && entriesPerPage) {
+      const entries = parseInt(entriesPerPage, 10);
+      if (!isNaN(entries) && entries > 0) {
+        ebayParams.entriesPerPage = entries;
+      }
+    }
+
+    if (useListingTypes) {
+      const types: string[] = [];
+      if (listingTypeAuction) types.push('AuctionWithBIN');
+      if (listingTypeFixed) types.push('FixedPrice');
+      if (types.length > 0) {
+        ebayParams.listingTypes = types;
+      }
+    }
+
+    if (useHideDuplicates) {
+      ebayParams.hideDuplicateItems = hideDuplicates;
+    }
+
+    if (useCategoryId && categoryId) {
+      ebayParams.categoryId = categoryId;
+    }
+
+    if (useMarketplaceId && marketplaceId) {
+      ebayParams.marketplaceId = marketplaceId;
+    }
+
+    ebayParams.enablePagination = enablePagination;
+    if (enablePagination && maxResults) {
+      const max = parseInt(maxResults, 10);
+      if (!isNaN(max) && max > 0 && max <= 10000) {
+        ebayParams.maxResults = max;
+      }
+    }
+
+    ebayParams.fieldgroups = 'EXTENDED';
+
+    const payload = {
+      name: 'job/capture.triggered',
+      data: {
+        marketplace: 'ebay',
+        keywords: keywordArray.length > 0 ? keywordArray : [],
+        ...(Object.keys(ebayParams).length > 0 && { ebayParams }),
+      },
+    };
+
+    return payload;
+  };
+
   return (
     <div className="p-8 bg-background">
       <h1 className="text-2xl font-bold mb-6 text-foreground">Capture</h1>
 
-      <Card>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
         <CardHeader>
           <CardTitle>Capture</CardTitle>
           <CardDescription>
@@ -206,14 +256,18 @@ export default function CapturePage() {
           <div className="space-y-4">
             {/* Keywords */}
             <div className="space-y-2">
-              <Label htmlFor="keywords">Keywords (comma-separated)</Label>
+              <Label htmlFor="keywords">Keywords (comma-separated) *</Label>
               <Input
                 id="keywords"
                 type="text"
                 value={keywords}
                 onChange={(e) => setKeywords(e.target.value)}
                 placeholder="lego bulk, lego job lot, lego lot"
+                required
               />
+              <p className="text-xs text-muted-foreground">
+                Required. Enter one or more keywords separated by commas.
+              </p>
             </div>
 
             {/* Entries Per Page */}
@@ -364,13 +418,39 @@ export default function CapturePage() {
         <CardFooter>
           <Button
             onClick={triggerCapture}
-            disabled={loadingAction}
+            disabled={loadingAction || !keywords.trim()}
             className="w-full"
           >
             {loadingAction ? 'Capturing...' : 'Trigger Capture'}
           </Button>
         </CardFooter>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Inngest Event Payload</CardTitle>
+          <CardDescription>
+            Copy this JSON to paste into Inngest's event trigger. Use the <code>data</code> field value.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <pre className="text-xs bg-muted p-4 rounded-md overflow-auto max-h-[600px]">
+            {JSON.stringify(generateInngestPayload(), null, 2)}
+          </pre>
+        </CardContent>
+        <CardFooter>
+          <Button
+            variant="outline"
+            onClick={() => {
+              navigator.clipboard.writeText(JSON.stringify(generateInngestPayload().data, null, 2));
+            }}
+            className="w-full"
+          >
+            Copy Data Field
+          </Button>
+        </CardFooter>
+      </Card>
+      </div>
 
       {error && (
         <Card className="mt-6">

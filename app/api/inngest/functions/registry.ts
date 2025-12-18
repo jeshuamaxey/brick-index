@@ -43,3 +43,4 @@ export function extractFunctionName(functionId: string): string | null {
 
   return functionId;
 }
+

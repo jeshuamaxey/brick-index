@@ -16,13 +16,18 @@ const actions = [
     href: "/backend/actions/capture",
   },
   {
+    title: "Materialize",
+    description: "Transforms raw listings from a capture job into structured listings in the database. Processes raw API responses, deduplicates listings, and inserts or updates entries in the listings table.",
+    href: "/backend/actions/materialize",
+  },
+  {
     title: "Enrich",
     description: "Enriches unenriched listings with detailed data from the eBay Browse API. Fetches descriptions, images, condition details, and other metadata to enhance the listing information in the database.",
     href: "/backend/actions/enrich",
   },
   {
     title: "Analyze",
-    description: "Analyzes listings to extract piece count, minifig count, condition, and calculate price per piece from listing titles and descriptions. Processes up to 100 unanalyzed listings per run.",
+    description: "Analyzes listings to extract piece count, minifig count, condition, and calculate price per piece from listing titles and descriptions. Processes all unanalyzed listings by default.",
     href: "/backend/actions/analyze",
   },
 ];

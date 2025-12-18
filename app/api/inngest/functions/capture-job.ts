@@ -72,8 +72,13 @@ export const captureJob = inngest.createFunction(
 
         // Parse ebayParams for search configuration
         const params = ebayParams as EbaySearchParams | undefined;
-        const searchKeywords = keywords && keywords.length > 0 ? keywords : ['lego bulk', 'lego job lot', 'lego lot'];
-        const keywordQuery = searchKeywords.join(' ');
+        
+        // Validate keywords (required)
+        if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
+          throw new Error('keywords is required and must be a non-empty array');
+        }
+        
+        const keywordQuery = keywords.join(' ');
         const limit = params?.entriesPerPage || 200;
         const maxResults = params?.maxResults || 10000;
         const fieldgroups = params?.fieldgroups || 'EXTENDED';
@@ -167,7 +172,7 @@ export const captureJob = inngest.createFunction(
         // Accumulate results
         totalItems += pageResult.itemsStored;
         rawListingIds.push(...pageResult.rawListingIds);
-        hasMore = pageResult.hasMore;
+        hasMore = Boolean(pageResult.hasMore);
         offset += searchConfig.limit;
         pageNumber++;
 
@@ -232,3 +237,4 @@ export const captureJob = inngest.createFunction(
     }
   }
 );
+

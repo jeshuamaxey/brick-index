@@ -52,6 +52,10 @@ const data = {
           url: "/backend/actions/capture",
         },
         {
+          title: "Materialize",
+          url: "/backend/actions/materialize",
+        },
+        {
           title: "Enrich",
           url: "/backend/actions/enrich",
         },
