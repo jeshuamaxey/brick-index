@@ -1,0 +1,240 @@
+// Inngest function for capture jobs
+// Handles long-running capture jobs by breaking work into steps
+
+import { inngest } from '@/lib/inngest/client';
+import { supabaseServer } from '@/lib/supabase/server';
+import { BaseJobService } from '@/lib/jobs/base-job-service';
+import { EbayAdapter, type EbaySearchParams } from '@/lib/capture/marketplace-adapters/ebay-adapter';
+import { getEbayAccessToken } from '@/lib/ebay/oauth-token-service';
+import type { JobType } from '@/lib/types';
+import type { Database, Json } from '@/lib/supabase/supabase.types';
+
+const BATCH_SIZE = 50; // Process 50 items per step to avoid timeout
+
+interface CaptureJobEvent {
+  name: 'job/capture.triggered';
+  data: {
+    marketplace: string;
+    keywords?: string[];
+    ebayParams?: unknown;
+  };
+}
+
+import { INNGEST_FUNCTION_IDS } from './registry';
+
+export const captureJob = inngest.createFunction(
+  { id: INNGEST_FUNCTION_IDS.CAPTURE_JOB },
+  { event: 'job/capture.triggered' },
+  async ({ event, step }) => {
+    let jobId: string | null = null;
+
+    try {
+      const { marketplace, keywords, ebayParams } = event.data;
+
+      // Step 1: Create job record
+      const job = await step.run('create-job', async () => {
+        const jobService = new BaseJobService(supabaseServer);
+        const jobType: JobType = `${marketplace}_refresh_listings` as JobType;
+        return await jobService.createJob(jobType, marketplace, {
+          keywords,
+          adapterParams: ebayParams || null,
+        });
+      });
+
+      jobId = job.id;
+
+      // Step 2: Update progress - searching
+      await step.run('update-progress-searching', async () => {
+        const jobService = new BaseJobService(supabaseServer);
+        await jobService.updateJobProgress(jobId!, 'Searching marketplace...');
+      });
+
+      // Step 3: Prepare search parameters and adapter config
+      const searchConfig = await step.run('prepare-search-config', async () => {
+        if (marketplace !== 'ebay') {
+          throw new Error(`Unsupported marketplace: ${marketplace}`);
+        }
+
+        const ebayAppId = process.env.EBAY_APP_ID;
+        const dataMode = process.env.EBAY_DATA_MODE ?? 'live';
+
+        if (dataMode === 'cache') {
+          // For cache mode, we still need to use the snapshot adapter
+          // But we'll handle this differently - snapshot adapter doesn't support fetchPage
+          throw new Error('Cache mode (EBAY_DATA_MODE=cache) not supported with page-level steps. Use live mode.');
+        }
+
+        if (!ebayAppId) {
+          throw new Error(
+            'EBAY_APP_ID is required when EBAY_DATA_MODE=live. Either set EBAY_DATA_MODE=cache or provide EBAY_APP_ID.'
+          );
+        }
+
+        // Parse ebayParams for search configuration
+        const params = ebayParams as EbaySearchParams | undefined;
+        
+        // Validate keywords (required)
+        if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
+          throw new Error('keywords is required and must be a non-empty array');
+        }
+        
+        const keywordQuery = keywords.join(' ');
+        const limit = params?.entriesPerPage || 200;
+        const maxResults = params?.maxResults || 10000;
+        const fieldgroups = params?.fieldgroups || 'EXTENDED';
+        const marketplaceId = params?.marketplaceId || process.env.EBAY_MARKETPLACE_ID || 'EBAY_US';
+
+        return {
+          ebayAppId,
+          keywordQuery,
+          limit,
+          maxResults,
+          fieldgroups,
+          marketplaceId,
+          params: ebayParams || undefined,
+        };
+      });
+
+      // Step 4: Search marketplace with page-level steps
+      let totalItems = 0;
+      let pageNumber = 0;
+      let offset = 0;
+      let hasMore = true;
+      const rawListingIds: string[] = [];
+      let totalAvailable: number | null = null;
+
+      while (hasMore) {
+        const pageResult = await step.run(`search-page-${pageNumber}`, async () => {
+          // Create adapter (can't serialize between steps)
+          const adapter = new EbayAdapter(searchConfig.ebayAppId);
+          
+          // Get OAuth token
+          const token = await getEbayAccessToken();
+          
+          // Fetch one page
+          const response = await adapter.fetchPage(
+            searchConfig.keywordQuery,
+            searchConfig.limit,
+            offset,
+            searchConfig.fieldgroups,
+            searchConfig.params,
+            token,
+            searchConfig.marketplaceId
+          );
+
+          const items = response.itemSummaries || [];
+          
+          // Store immediately to database
+          const ids: string[] = [];
+          for (const item of items) {
+            const { data: rawListing, error: rawError } = await supabaseServer
+              .schema('pipeline')
+              .from('raw_listings')
+              .insert({
+                marketplace,
+                api_response: item as Json,
+                job_id: jobId!,
+              })
+              .select('id')
+              .single();
+
+            if (rawError) {
+              console.error('Error storing raw listing:', rawError);
+              continue;
+            }
+
+            if (rawListing) {
+              ids.push(rawListing.id);
+            }
+          }
+
+          // Update total from first response
+          if (totalAvailable === null) {
+            totalAvailable = response.total ?? null;
+          }
+
+          // Check if we should continue pagination
+          const currentTotal = totalItems + ids.length;
+          const shouldContinue = 
+            response.next && 
+            currentTotal < searchConfig.maxResults &&
+            (totalAvailable === null || offset + searchConfig.limit < totalAvailable);
+
+          return {
+            pageNumber,
+            itemsStored: ids.length,
+            totalItems: totalAvailable,
+            hasMore: shouldContinue,
+            rawListingIds: ids,
+          };
+        });
+
+        // Accumulate results
+        totalItems += pageResult.itemsStored;
+        rawListingIds.push(...pageResult.rawListingIds);
+        hasMore = Boolean(pageResult.hasMore);
+        offset += searchConfig.limit;
+        pageNumber++;
+
+        // Update progress periodically (every 10 pages)
+        if (pageNumber % 10 === 0) {
+          await step.run(`update-progress-pages-${pageNumber}`, async () => {
+            const jobService = new BaseJobService(supabaseServer);
+            await jobService.updateJobProgress(
+              jobId!,
+              `Fetched ${pageNumber} pages, ${totalItems} listings stored...`,
+              { listings_found: totalItems }
+            );
+          });
+        }
+
+        // If cancelled, Inngest stops here before next step.run()
+      }
+
+      const listingsFound = totalItems;
+
+      // Step 5: Complete capture job
+      await step.run('complete-capture-job', async () => {
+        const jobService = new BaseJobService(supabaseServer);
+        await jobService.completeJob(
+          jobId!,
+          {
+            listings_found: listingsFound,
+          },
+          `Completed: Captured ${listingsFound} raw listings`
+        );
+      });
+
+      // Step 6: Trigger materialize job
+      await step.run('trigger-materialize-job', async () => {
+        await inngest.send({
+          name: 'job/materialize.triggered',
+          data: {
+            captureJobId: jobId!,
+            marketplace,
+          },
+        });
+      });
+
+      return {
+        jobId,
+        status: 'completed',
+        listings_found: listingsFound,
+        raw_listings_stored: listingsFound,
+      };
+    } catch (error) {
+      // Mark job as failed if it was created
+      if (jobId) {
+        await step.run('fail-job', async () => {
+          const jobService = new BaseJobService(supabaseServer);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          await jobService.failJob(jobId!, errorMessage);
+        });
+      }
+
+      // Re-throw to let Inngest know function failed
+      throw error;
+    }
+  }
+);
+

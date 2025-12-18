@@ -24,8 +24,8 @@ const REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 minutes
  * Get the OAuth token endpoint URL based on environment
  */
 function getTokenEndpoint(): string {
-  const environment = process.env.EBAY_ENVIRONMENT ?? 'production';
-  const isSandbox = environment === 'sandbox';
+  const environment = process.env.EBAY_ENVIRONMENT ?? 'PRODUCTION';
+  const isSandbox = environment === 'SANDBOX';
   
   return isSandbox
     ? 'https://api.sandbox.ebay.com/identity/v1/oauth2/token'

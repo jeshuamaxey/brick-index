@@ -20,6 +20,7 @@ const routeTitles: Record<string, string> = {
   listings: "Listings",
   catalog: "Catalog",
   capture: "Capture",
+  materialize: "Materialize",
   enrich: "Enrich",
   analyze: "Analyze",
 }

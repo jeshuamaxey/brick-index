@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:inngest": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -37,6 +38,7 @@
     "clsx": "^2.1.1",
     "csv-parse": "^6.1.0",
     "event-notification-nodejs-sdk": "^1.0.3",
+    "inngest": "^3.48.0",
     "lucide-react": "^0.561.0",
     "msw": "^2.12.4",
     "next": "16.0.10",

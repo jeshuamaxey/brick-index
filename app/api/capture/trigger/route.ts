@@ -1,13 +1,8 @@
-// API route to trigger a capture job
+// API route to trigger a capture job via Inngest
 
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase/client';
-import { CaptureService } from '@/lib/capture/capture-service';
-import {
-  EbayAdapter,
-  type EbaySearchParams,
-} from '@/lib/capture/marketplace-adapters/ebay-adapter';
-import { EbaySnapshotAdapter } from '@/lib/capture/marketplace-adapters/ebay-snapshot-adapter';
+import { inngest } from '@/lib/inngest/client';
+import type { EbaySearchParams } from '@/lib/capture/marketplace-adapters/ebay-adapter';
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,79 +17,50 @@ export async function POST(request: NextRequest) {
       ebayParams?: EbaySearchParams;
     } = body;
 
-    // Create adapter based on marketplace and EBAY_DATA_MODE
-    let adapter;
-    if (marketplace === 'ebay') {
-      const ebayAppId = process.env.EBAY_APP_ID;
-      const dataMode = process.env.EBAY_DATA_MODE ?? 'live';
+    // Validate keywords (required)
+    if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
+      return NextResponse.json(
+        { error: 'keywords is required and must be a non-empty array' },
+        { status: 400 }
+      );
+    }
 
-      if (dataMode === 'cache') {
-        // Use snapshot-based adapter that never calls the live eBay API.
-        adapter = new EbaySnapshotAdapter();
-      } else {
-        if (!ebayAppId) {
-          return NextResponse.json(
-            {
-              error:
-                'EBAY_APP_ID is required when EBAY_DATA_MODE=live. Either set EBAY_DATA_MODE=cache or provide EBAY_APP_ID.',
-            },
-            { status: 400 }
-          );
-        }
-        // OAuth token will be fetched automatically by EbayAdapter
-        adapter = new EbayAdapter(ebayAppId);
-      }
-    } else {
+    // Validate marketplace
+    if (marketplace !== 'ebay') {
       return NextResponse.json(
         { error: `Unsupported marketplace: ${marketplace}` },
         { status: 400 }
       );
     }
 
-    // Create capture service and start capture job
-    const captureService = new CaptureService(supabase);
-    const searchKeywords = keywords || ['lego bulk', 'lego job lot', 'lego lot'];
-    
-    try {
-      // Start the job (it will create the job resource internally)
-      // Job creation happens synchronously, so we can catch errors immediately
-      const jobPromise = captureService.captureFromMarketplace(
-        adapter,
-        searchKeywords,
-        ebayParams
+    // Validate eBay configuration if needed
+    const dataMode = process.env.EBAY_DATA_MODE ?? 'live';
+    if (dataMode === 'live' && !process.env.EBAY_APP_ID) {
+      return NextResponse.json(
+        {
+          error:
+            'EBAY_APP_ID is required when EBAY_DATA_MODE=live. Either set EBAY_DATA_MODE=cache or provide EBAY_APP_ID.',
+        },
+        { status: 400 }
       );
-
-      // Wait just long enough to get the job ID (job is created synchronously at start)
-      // If job creation fails, this will throw and be caught below
-      const jobIdPromise = jobPromise.then((job) => job.id);
-      
-      // Race between getting job ID and a small timeout
-      // Use a longer timeout to ensure job creation completes
-      const jobId = await Promise.race([
-        jobIdPromise,
-        new Promise<string | null>((resolve) => 
-          setTimeout(() => resolve(null), 500)
-        ),
-      ]);
-
-      if (!jobId) {
-        // If we couldn't get job ID quickly, still return - job is running
-        return NextResponse.json({
-          status: 'running',
-          message: 'Job started, check /api/jobs for status',
-        });
-      }
-
-      // Return job info immediately
-      return NextResponse.json({
-        jobId,
-        status: 'running',
-      });
-    } catch (error) {
-      // Catch errors that happen during job creation (synchronous errors)
-      // Errors during execution are handled by the service and won't be caught here
-      throw error;
     }
+
+    // Send Inngest event to trigger capture job
+    
+    await inngest.send({
+      name: 'job/capture.triggered',
+      data: {
+        marketplace,
+        keywords,
+        ebayParams,
+      },
+    });
+
+    // Return immediately - job will be processed asynchronously by Inngest
+    return NextResponse.json({
+      status: 'running',
+      message: 'Job started, check /api/jobs for status',
+    });
   } catch (error) {
     console.error('Error triggering capture:', error);
     return NextResponse.json(

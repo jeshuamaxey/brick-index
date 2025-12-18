@@ -7,7 +7,7 @@ config({ path: path.resolve(process.cwd(), '.env.local') });
 config({ path: path.resolve(process.cwd(), '.env') });
 
 // Override EBAY_ENVIRONMENT to ensure we always fetch from production
-process.env.EBAY_ENVIRONMENT = 'production';
+process.env.EBAY_ENVIRONMENT = 'PRODUCTION';
 process.env.EBAY_APP_ID = process.env.PROD_EBAY_APP_ID;
 // EBAY_CLIENT_SECRET should be set from PROD_EBAY_CLIENT_SECRET if needed
 if (process.env.PROD_EBAY_CLIENT_SECRET) {

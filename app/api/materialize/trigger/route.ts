@@ -1,4 +1,4 @@
-// API route to trigger listing enrichment via Inngest
+// API route to trigger materialize listings job via Inngest
 
 import { NextRequest, NextResponse } from 'next/server';
 import { inngest } from '@/lib/inngest/client';
@@ -7,41 +7,33 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
     const {
-      marketplace = 'ebay',
-      limit,
-      delayMs = 200,
+      captureJobId,
+      marketplace,
     }: {
-      marketplace?: string;
-      limit?: number;
-      delayMs?: number;
+      captureJobId: string;
+      marketplace: string;
     } = body;
 
-    // Validate marketplace
-    if (marketplace !== 'ebay') {
+    if (!captureJobId) {
       return NextResponse.json(
-        { error: `Unsupported marketplace: ${marketplace}` },
+        { error: 'captureJobId is required' },
         { status: 400 }
       );
     }
 
-    // Validate eBay configuration
-    if (!process.env.EBAY_APP_ID) {
+    if (!marketplace) {
       return NextResponse.json(
-        {
-          error:
-            'EBAY_APP_ID environment variable is required for enrichment',
-        },
+        { error: 'marketplace is required' },
         { status: 400 }
       );
     }
 
-    // Send Inngest event to trigger enrichment job
+    // Send Inngest event to trigger materialize job
     await inngest.send({
-      name: 'job/enrich.triggered',
+      name: 'job/materialize.triggered',
       data: {
+        captureJobId,
         marketplace,
-        limit,
-        delayMs,
       },
     });
 
@@ -51,7 +43,7 @@ export async function POST(request: NextRequest) {
       message: 'Job started, check /api/jobs for status',
     });
   } catch (error) {
-    console.error('Error enriching listings:', error);
+    console.error('Error triggering materialize job:', error);
     return NextResponse.json(
       {
         error:
@@ -61,4 +53,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

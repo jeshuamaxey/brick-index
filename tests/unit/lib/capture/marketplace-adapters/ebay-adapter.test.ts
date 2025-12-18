@@ -13,7 +13,7 @@ describe('EbayAdapter.getItemDetails()', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Set environment to production for consistent testing
-    process.env.EBAY_ENVIRONMENT = 'production';
+    process.env.EBAY_ENVIRONMENT = 'PRODUCTION';
     process.env.EBAY_MARKETPLACE_ID = 'EBAY_US';
     adapter = new EbayAdapter(appId, oauthToken);
   });
@@ -68,7 +68,7 @@ describe('EbayAdapter.getItemDetails()', () => {
     });
 
     it('uses correct base URL for production', async () => {
-      process.env.EBAY_ENVIRONMENT = 'production';
+      process.env.EBAY_ENVIRONMENT = 'PRODUCTION';
       const adapter = new EbayAdapter(appId, oauthToken);
 
       mockFetch.mockResolvedValueOnce({
@@ -84,7 +84,7 @@ describe('EbayAdapter.getItemDetails()', () => {
     });
 
     it('uses correct base URL for sandbox', async () => {
-      process.env.EBAY_ENVIRONMENT = 'sandbox';
+      process.env.EBAY_ENVIRONMENT = 'SANDBOX';
       const adapter = new EbayAdapter(appId, oauthToken);
 
       mockFetch.mockResolvedValueOnce({
@@ -233,7 +233,7 @@ describe('EbayAdapter.getItemDetails()', () => {
 
   describe('browseBaseUrl initialization', () => {
     it('initializes browseBaseUrl correctly in constructor', async () => {
-      process.env.EBAY_ENVIRONMENT = 'production';
+      process.env.EBAY_ENVIRONMENT = 'PRODUCTION';
       const adapter = new EbayAdapter(appId, oauthToken);
       
       // Verify browseBaseUrl is set by checking it's used in getItemDetails

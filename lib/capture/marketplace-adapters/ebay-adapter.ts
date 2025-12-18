@@ -106,8 +106,8 @@ export class EbayAdapter implements MarketplaceAdapter {
     this.oauthToken = oauthToken;
 
     // Support both production and sandbox/staging environments.
-    const environment = process.env.EBAY_ENVIRONMENT ?? 'production';
-    const isSandbox = environment === 'sandbox';
+    const environment = process.env.EBAY_ENVIRONMENT ?? 'PRODUCTION';
+    const isSandbox = environment === 'SANDBOX';
     this.baseUrl = isSandbox
       ? 'https://api.sandbox.ebay.com/buy/browse/v1'
       : 'https://api.ebay.com/buy/browse/v1';
@@ -190,8 +190,9 @@ export class EbayAdapter implements MarketplaceAdapter {
 
   /**
    * Make a single API call to fetch a page of results
+   * Public method to allow direct calls from Inngest step functions
    */
-  private async fetchPage(
+  async fetchPage(
     keywordQuery: string,
     limit: number,
     offset: number,
