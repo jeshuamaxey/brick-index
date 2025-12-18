@@ -417,21 +417,32 @@ export type Database = {
           api_response: Json
           created_at: string | null
           id: string
+          job_id: string | null
           marketplace: string
         }
         Insert: {
           api_response: Json
           created_at?: string | null
           id?: string
+          job_id?: string | null
           marketplace: string
         }
         Update: {
           api_response?: Json
           created_at?: string | null
           id?: string
+          job_id?: string | null
           marketplace?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "raw_listings_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -468,6 +479,7 @@ export type Database = {
         | "ebay_enrich_listings"
         | "analyze_listings"
         | "lego_catalog_refresh"
+        | "ebay_materialize_listings"
     }
     CompositeTypes: {
       [_ in never]: never

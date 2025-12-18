@@ -5,6 +5,8 @@ import { inngest } from '@/lib/inngest/client';
 import { supabaseServer } from '@/lib/supabase/server';
 import { BaseJobService } from '@/lib/jobs/base-job-service';
 import { FUNCTION_TO_JOB_TYPE, extractFunctionName, INNGEST_FUNCTION_IDS } from './registry';
+import type { JobType } from '@/lib/types';
+import type { Database } from '@/lib/supabase/supabase.types';
 
 export const handleJobCancellation = inngest.createFunction(
   { id: INNGEST_FUNCTION_IDS.HANDLE_JOB_CANCELLATION },
@@ -29,6 +31,9 @@ export const handleJobCancellation = inngest.createFunction(
         return;
       }
 
+      // Type assertion: jobType is guaranteed to be a valid JobType from FUNCTION_TO_JOB_TYPE
+      const validJobType = jobType as JobType;
+
       // For materialize jobs, we can match by captureJobId in metadata
       let jobId: string | null = null;
       
@@ -38,7 +43,7 @@ export const handleJobCancellation = inngest.createFunction(
           .schema('pipeline')
           .from('jobs')
           .select('id, metadata')
-          .eq('type', jobType)
+          .eq('type', validJobType as Database['pipeline']['Enums']['job_type'])
           .eq('status', 'running')
           .order('started_at', { ascending: false });
 
@@ -61,7 +66,7 @@ export const handleJobCancellation = inngest.createFunction(
           .schema('pipeline')
           .from('jobs')
           .select('id')
-          .eq('type', jobType)
+          .eq('type', validJobType as Database['pipeline']['Enums']['job_type'])
           .eq('status', 'running')
           .eq('marketplace', marketplace)
           .order('started_at', { ascending: false })
