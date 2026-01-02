@@ -6,6 +6,14 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis, LabelList } from 'recharts';
+import { TrendingUp } from 'lucide-react';
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from '@/components/ui/chart';
 
 interface AggregateData {
   basic: {
@@ -25,14 +33,24 @@ interface AggregateData {
   };
 }
 
+interface PipelineStats {
+  rawListings: number;
+  listings: number;
+  enrichedListings: number;
+  analyzedListings: number;
+}
+
 export default function ResourcesPage() {
   const [data, setData] = useState<AggregateData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [numberOfBuckets, setNumberOfBuckets] = useState<number>(5);
+  const [pipelineStats, setPipelineStats] = useState<PipelineStats | null>(null);
+  const [pipelineStatsLoading, setPipelineStatsLoading] = useState(true);
 
   useEffect(() => {
     fetchData();
+    fetchPipelineStats();
   }, [numberOfBuckets]);
 
   const fetchData = async () => {
@@ -51,9 +69,25 @@ export default function ResourcesPage() {
     }
   };
 
+  const fetchPipelineStats = async () => {
+    try {
+      setPipelineStatsLoading(true);
+      const response = await fetch('/api/backend/resources/pipeline-stats');
+      if (!response.ok) {
+        throw new Error('Failed to fetch pipeline stats');
+      }
+      const result = await response.json();
+      setPipelineStats(result);
+    } catch (err) {
+      console.error('Error fetching pipeline stats:', err);
+    } finally {
+      setPipelineStatsLoading(false);
+    }
+  };
+
   if (loading) {
     return (
-      <div className="p-8">
+      <div className="h-full overflow-y-auto p-8">
         <h1 className="text-2xl font-bold mb-4">Market Aggregate</h1>
         <div className="mt-8 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -69,7 +103,7 @@ export default function ResourcesPage() {
 
   if (error || !data) {
     return (
-      <div className="p-8">
+      <div className="h-full overflow-y-auto p-8">
         <h1 className="text-2xl font-bold mb-4">Market Aggregate</h1>
         <Card className="mt-8">
           <CardContent className="pt-6">
@@ -81,48 +115,179 @@ export default function ResourcesPage() {
   }
 
   return (
-    <div className="p-8">
+    <div className="h-full overflow-y-auto p-8">
       <h1 className="text-2xl font-bold mb-4">Market Aggregate</h1>
 
       <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader>
-            <CardDescription>Total Listings</CardDescription>
-            <CardTitle className="text-2xl">{data.basic.totalListings.toLocaleString()}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>Analysis</CardDescription>
+            <CardTitle>Capture</CardTitle>
+            <CardDescription>Raw listings captured</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">With Analysis</span>
-                <span className="text-lg font-semibold">{data.basic.withAnalysis.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Without Analysis</span>
-                <span className="text-lg font-semibold">{data.basic.withoutAnalysis.toLocaleString()}</span>
-              </div>
-            </div>
+            {pipelineStatsLoading ? (
+              <Skeleton className="h-8 w-24" />
+            ) : pipelineStats ? (
+              <div className="text-2xl font-bold">{pipelineStats.rawListings.toLocaleString()}</div>
+            ) : (
+              <div className="text-sm text-muted-foreground">No data available</div>
+            )}
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardDescription>Price Per Piece</CardDescription>
+            <CardTitle>Materialise</CardTitle>
+            <CardDescription>Listings materialised</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">With Estimate</span>
-                <span className="text-lg font-semibold">{data.basic.withPricePerPiece.toLocaleString()}</span>
+            {pipelineStatsLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-6 w-32" />
+                <Skeleton className="h-6 w-32" />
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Without Estimate</span>
-                <span className="text-lg font-semibold">{data.basic.withoutPricePerPiece.toLocaleString()}</span>
+            ) : pipelineStats ? (
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Materialised</span>
+                  <span className="text-lg font-semibold">{pipelineStats.listings.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Not yet materialised</span>
+                  <span className="text-lg font-semibold">
+                    {Math.max(0, pipelineStats.rawListings - pipelineStats.listings).toLocaleString()}
+                  </span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">No data available</div>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Enrich</CardTitle>
+            <CardDescription>Listings enriched</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {pipelineStatsLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-6 w-32" />
+                <Skeleton className="h-6 w-32" />
+              </div>
+            ) : pipelineStats ? (
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Enriched</span>
+                  <span className="text-lg font-semibold">{pipelineStats.enrichedListings.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Not yet enriched</span>
+                  <span className="text-lg font-semibold">
+                    {Math.max(0, pipelineStats.listings - pipelineStats.enrichedListings).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">No data available</div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="mt-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Pipeline Data Overview</CardTitle>
+            <CardDescription>
+              Number of records at each pipeline stage
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {pipelineStatsLoading ? (
+              <Skeleton className="h-[300px] w-full" />
+            ) : pipelineStats ? (
+              (() => {
+                const chartData = [
+                  { 
+                    stage: 'Raw Listings', 
+                    count: pipelineStats.rawListings,
+                    percentage: 100 // First bar is always 100%
+                  },
+                  { 
+                    stage: 'Listings', 
+                    count: pipelineStats.listings,
+                    percentage: pipelineStats.rawListings > 0 
+                      ? (pipelineStats.listings / pipelineStats.rawListings) * 100 
+                      : 0
+                  },
+                  { 
+                    stage: 'Enriched', 
+                    count: pipelineStats.enrichedListings,
+                    percentage: pipelineStats.listings > 0 
+                      ? (pipelineStats.enrichedListings / pipelineStats.listings) * 100 
+                      : 0
+                  },
+                  { 
+                    stage: 'Analyzed', 
+                    count: pipelineStats.analyzedListings,
+                    percentage: pipelineStats.enrichedListings > 0 
+                      ? (pipelineStats.analyzedListings / pipelineStats.enrichedListings) * 100 
+                      : 0
+                  },
+                ];
+
+                const chartConfig = {
+                  count: {
+                    label: 'Count',
+                    color: 'var(--chart-1)',
+                  },
+                  percentage: {
+                    label: 'Percentage',
+                    color: 'var(--chart-2)',
+                  },
+                } satisfies ChartConfig;
+
+                return (
+                  <ChartContainer config={chartConfig}>
+                    <BarChart
+                      accessibilityLayer
+                      data={chartData}
+                      margin={{
+                        top: 20,
+                      }}
+                    >
+                      <CartesianGrid vertical={false} />
+                      <XAxis
+                        dataKey="stage"
+                        tickLine={false}
+                        tickMargin={10}
+                        axisLine={false}
+                      />
+                      <YAxis tickLine={false} axisLine={false} tickFormatter={(value: string | number) => Number.parseInt(String(value)).toLocaleString()} />
+                      <ChartTooltip
+                        cursor={false}
+                        content={<ChartTooltipContent hideLabel formatter={(value) => {
+                        const i = chartData.findIndex(d => d.count === value);
+                        if (i === -1) return value;
+                        const pc = chartData[i].percentage.toFixed(2) + '%';
+
+                        return `Converted: ${pc}`;
+                        }} />}
+                      />
+                      <Bar dataKey="count" fill="var(--color-count)" radius={2}>
+                        <LabelList
+                          position="top"
+                          offset={12}
+                          className="fill-foreground"
+                          fontSize={12}
+                          formatter={(value: string | number) => Number.parseInt(String(value)).toLocaleString()}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ChartContainer>
+                );
+              })()
+            ) : <div className="text-sm text-muted-foreground">No pipeline stats available</div>}
           </CardContent>
         </Card>
       </div>

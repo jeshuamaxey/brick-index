@@ -106,6 +106,11 @@ All data related to user-facing features:
 
 Access dev pages at:
 
+- `/backend/resources` - Pipeline overview with data visualization (Capture, Materialise, Enrich metrics and bar chart)
+- `/backend/resources/jobs` - View all jobs and their status
+- `/backend/resources/listings` - View captured listings
+- `/backend/resources/api-usage` - View API usage tracking
+- `/backend/resources/catalog` - View LEGO catalog data
 - `/dev/listings` - View captured listings
 - `/dev/analysis` - View analysis results
 - `/dev/capture` - Trigger capture jobs
