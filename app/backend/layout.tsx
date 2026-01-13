@@ -23,7 +23,7 @@ export default function BackendLayout({
             <BreadcrumbNav />
           </div>
         </header>
-        <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden">
+        <div className="flex flex-col h-[calc(100vh-4rem)] overflow-y-auto">
           {children}
         </div>
       </SidebarInset>
