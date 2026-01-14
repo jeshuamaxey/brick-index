@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface CatalogStats {
   total_sets: number;
@@ -47,6 +47,9 @@ export default function CatalogPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Use ref to track if there are running jobs without restarting interval
+  const hasRunningJobsRef = useRef(false);
 
   const fetchStats = async () => {
     try {
@@ -64,6 +67,9 @@ export default function CatalogPage() {
       const jobs = (jobsData.jobs || []) as RefreshJob[];
 
       setRecentJobs(jobs);
+      
+      // Update ref with latest running jobs status
+      hasRunningJobsRef.current = jobs.some((j) => j.status === 'running');
 
       // Get the most recent completed job for stats
       const lastCompletedJob = jobs.find((j) => j.status === 'completed');
@@ -98,13 +104,18 @@ export default function CatalogPage() {
     }
   };
 
+  // Update ref when jobs change
+  useEffect(() => {
+    hasRunningJobsRef.current = recentJobs.some((j) => j.status === 'running');
+  }, [recentJobs]);
+
+  // Set up polling interval once - checks ref each tick to avoid stale closures
   useEffect(() => {
     fetchStats();
 
-    // Poll for updates if there are running jobs
     const pollInterval = setInterval(() => {
-      const hasRunning = recentJobs.some((j) => j.status === 'running');
-      if (hasRunning) {
+      // Check ref for latest running jobs status without restarting interval
+      if (hasRunningJobsRef.current) {
         fetchStats();
       }
     }, 2000);
@@ -129,10 +140,48 @@ export default function CatalogPage() {
         throw new Error(data.error || 'Failed to trigger catalog refresh');
       }
 
-      // Refresh stats after triggering
-      setTimeout(() => {
-        fetchStats();
-      }, 1000);
+      const data = await response.json();
+      
+      // If the API returned a job, add it directly to state instead of fetching
+      if (data.job) {
+        const newJob: RefreshJob = {
+          id: data.job.id,
+          status: data.job.status as 'running' | 'completed' | 'failed',
+          metadata: data.job.metadata || {},
+          started_at: data.job.started_at,
+          completed_at: data.job.completed_at,
+          error_message: data.job.error_message,
+        };
+
+        // Add the new job to the beginning of the list
+        setRecentJobs((prevJobs) => [newJob, ...prevJobs]);
+        
+        // Update the ref
+        hasRunningJobsRef.current = newJob.status === 'running';
+        
+        // Update stats with the new job
+        const metadata = newJob.metadata || {};
+        setStats((prevStats) => ({
+          total_sets: metadata.sets_found || prevStats?.total_sets || 0,
+          total_themes: metadata.themes_found || prevStats?.total_themes || 0,
+          last_refresh: {
+            id: newJob.id,
+            status: newJob.status,
+            started_at: newJob.started_at,
+            completed_at: newJob.completed_at,
+            files_checked: metadata.files_checked || 0,
+            files_changed: metadata.files_changed || 0,
+            files_unchanged: metadata.files_unchanged || 0,
+            sets_new: metadata.sets_new || 0,
+            sets_updated: metadata.sets_updated || 0,
+            themes_new: metadata.themes_new || 0,
+            themes_updated: metadata.themes_updated || 0,
+          },
+        }));
+      } else {
+        // Fallback: fetch stats if job wasn't returned (backward compatibility)
+        await fetchStats();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -162,22 +211,14 @@ export default function CatalogPage() {
     }
   };
 
-  const hasRunningJobs = recentJobs.some((job) => job.status === 'running');
-
   return (
     <div className="p-8 bg-background text-foreground">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">LEGO Catalog</h1>
         <div className="flex items-center gap-3">
-          {hasRunningJobs && (
-            <span className="text-xs text-foreground/60 flex items-center gap-2">
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-              Auto-refreshing...
-            </span>
-          )}
           <button
             onClick={triggerRefresh}
-            disabled={refreshing || hasRunningJobs}
+            disabled={refreshing}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {refreshing ? 'Refreshing...' : 'Refresh Catalog'}
