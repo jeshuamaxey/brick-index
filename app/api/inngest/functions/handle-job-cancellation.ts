@@ -61,7 +61,14 @@ export const handleJobCancellation = inngest.createFunction(
 
       // Fallback: Find most recent running job of matching type and marketplace
       if (!jobId) {
-        const marketplace = originalEvent.data?.marketplace || 'ebay';
+        // Determine marketplace based on job type or event data
+        let marketplace: string;
+        if (validJobType === 'lego_catalog_refresh') {
+          marketplace = 'rebrickable';
+        } else {
+          marketplace = originalEvent.data?.marketplace || 'ebay';
+        }
+
         const { data: jobs } = await supabaseServer
           .schema('pipeline')
           .from('jobs')
