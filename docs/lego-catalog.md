@@ -29,7 +29,7 @@ Main catalog table containing all official LEGO sets:
 - `year` (INTEGER) - Release year
 - `theme_id` (INTEGER) - Reference to theme
 - `num_parts` (INTEGER) - Official piece count
-- `set_img_url` (TEXT) - Official set image URL
+- `set_img_url` (TEXT) - Official set image URL (constructed from `set_num` if not provided in CSV: `https://cdn.rebrickable.com/media/sets/{set_num}.jpg`)
 - `set_url` (TEXT) - Official LEGO.com URL
 - `last_modified` (TIMESTAMP) - When Rebrickable last updated this set
 
@@ -89,6 +89,7 @@ sequenceDiagram
    - Decompress using Node.js zlib
    - Parse CSV using `csv-parse` library
    - Transform data to match database schema
+   - Construct `set_img_url` from `set_num` if not provided in CSV: `https://cdn.rebrickable.com/media/sets/{set_num}.jpg`
 
 3. **Upsert to Database**: 
    - Batch upsert sets/themes (1000 records per batch)
@@ -117,18 +118,25 @@ All job tracking uses the unified `pipeline.jobs` table - no separate catalog-sp
 ### API Endpoints
 
 #### `POST /api/catalog/refresh`
-Triggers a manual catalog refresh job.
+Triggers a manual catalog refresh job. The job is created synchronously and returned in the response.
 
 **Response**:
 ```json
 {
-  "jobId": "uuid",
-  "status": "running",
-  "message": "Catalog refresh job started"
+  "status": "queued",
+  "message": "Catalog refresh job queued",
+  "job": {
+    "id": "uuid",
+    "status": "running",
+    "started_at": "2025-01-20T...",
+    "completed_at": null,
+    "error_message": null,
+    "metadata": {}
+  }
 }
 ```
 
-The job executes asynchronously. Use `/api/jobs?type=lego_catalog_refresh` to check status.
+The job executes asynchronously via Inngest. The returned job object can be used immediately in the UI without additional API calls.
 
 ### Backend UI
 
@@ -138,8 +146,9 @@ Features:
 - View catalog statistics (total sets, themes, last refresh)
 - Display change detection metrics (files checked/changed/unchanged)
 - View recent refresh jobs with detailed statistics
-- Manual refresh trigger button
-- Auto-refresh when jobs are running
+- Manual refresh trigger button (can trigger multiple jobs)
+- Real-time job status updates via polling (every 2 seconds when jobs are running)
+- Immediate job display after triggering (no page reload needed)
 
 ### Benefits of Change Detection
 
@@ -189,6 +198,7 @@ Located in `lib/catalog/lego-catalog-service.ts`
 
 - `20250119000002_add_lego_catalog_schema.sql` - Creates catalog schema and tables
 - `20250119000003_add_catalog_refresh_job_type.sql` - Adds job type to enum
+- `20250120000001_backfill_set_img_url.sql` - Backfills image URLs for existing sets
 
 ### Configuration
 

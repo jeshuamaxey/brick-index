@@ -14,7 +14,9 @@ const SETS_BATCH_SIZE = 1000; // Process 1000 sets per step to avoid timeout
 
 interface CatalogRefreshJobEvent {
   name: 'job/catalog-refresh.triggered';
-  data: Record<string, never>; // No parameters needed
+  data: {
+    jobId?: string; // Optional: if provided, use existing job instead of creating new one
+  };
 }
 
 export const catalogRefreshJob = inngest.createFunction(
@@ -24,8 +26,29 @@ export const catalogRefreshJob = inngest.createFunction(
     let jobId: string | null = null;
 
     try {
-      // Step 1: Create job record
+      // Step 1: Create job record (or use existing if jobId provided)
       const job = await step.run('create-job', async () => {
+        // If jobId is provided, fetch the existing job instead of creating a new one
+        if (event.data.jobId) {
+          const { data: existingJob, error } = await supabaseServer
+            .schema('pipeline')
+            .from('jobs')
+            .select('*')
+            .eq('id', event.data.jobId)
+            .single();
+
+          if (error) {
+            throw new Error(`Failed to fetch existing job: ${error.message}`);
+          }
+
+          if (!existingJob) {
+            throw new Error(`Job not found: ${event.data.jobId}`);
+          }
+
+          return existingJob;
+        }
+
+        // Otherwise, create a new job (backward compatibility)
         const jobService = new BaseJobService(supabaseServer);
         return await jobService.createJob(
           'lego_catalog_refresh' as JobType,
@@ -161,64 +184,69 @@ export const catalogRefreshJob = inngest.createFunction(
       // Step 5: Process sets if changed
       const setsFile = changedFiles.find((f) => f.filename === 'sets.csv.gz');
       if (setsFile) {
-        // Download and parse sets
-        const setsData = await step.run('download-sets', async () => {
+        // Download, parse, and process sets in batches (avoid returning large arrays)
+        const setsSummary = await step.run('download-and-process-sets', async () => {
           const catalogService = new LegoCatalogService(supabaseServer);
-          return await catalogService.downloadAndParseCsv('sets.csv.gz');
+          const jobService = new BaseJobService(supabaseServer);
+          
+          // Download and parse CSV
+          const csvContent = await catalogService.downloadCsvFile('sets.csv.gz');
+          const sets = await catalogService.parseSetsCsv(csvContent);
+          
+          const totalSets = sets.length;
+          const batches = Math.ceil(totalSets / SETS_BATCH_SIZE);
+          let totalUpdated = 0;
+
+          // Process sets in batches to avoid large step output
+          for (let i = 0; i < batches; i++) {
+            const start = i * SETS_BATCH_SIZE;
+            const end = Math.min(start + SETS_BATCH_SIZE, totalSets);
+            const batch = sets.slice(start, end);
+
+            const batchResult = await catalogService.upsertSetsBatch(batch);
+            totalUpdated += batchResult.updated;
+
+            // Update progress every few batches
+            if (i % 5 === 0 || i === batches - 1) {
+              await jobService.updateJobProgress(
+                jobId!,
+                `Processing sets: ${Math.min(end, totalSets)}/${totalSets} processed...`
+              );
+            }
+          }
+
+          // Return only summary statistics, not the full sets array
+          return {
+            totalSets,
+            totalUpdated,
+            batches,
+          };
         });
+
+        totalSetsFound = setsSummary.totalSets;
+        totalSetsUpdated = setsSummary.totalUpdated;
 
         // Update progress
         await step.run('update-progress-sets-downloaded', async () => {
           const jobService = new BaseJobService(supabaseServer);
           await jobService.updateJobProgress(
             jobId!,
-            `Downloaded sets.csv.gz: ${setsData.sets?.length || 0} sets found`
+            `Downloaded and processed sets.csv.gz: ${totalSetsFound} sets found`
           );
         });
 
-        // Upsert sets in batches
-        if (setsData.sets && setsData.sets.length > 0) {
-          const sets = setsData.sets;
-          totalSetsFound = sets.length;
-          const batches = Math.ceil(sets.length / SETS_BATCH_SIZE);
-
-          for (let i = 0; i < batches; i++) {
-            const start = i * SETS_BATCH_SIZE;
-            const end = Math.min(start + SETS_BATCH_SIZE, sets.length);
-            const batch = sets.slice(start, end);
-
-            const batchResult = await step.run(`upsert-sets-batch-${i}`, async () => {
-              const catalogService = new LegoCatalogService(supabaseServer);
-              return await catalogService.upsertSetsBatch(batch);
-            });
-
-            totalSetsUpdated += batchResult.updated;
-
-            // Update progress every few batches
-            if (i % 5 === 0 || i === batches - 1) {
-              await step.run(`update-progress-sets-batch-${i}`, async () => {
-                const jobService = new BaseJobService(supabaseServer);
-                await jobService.updateJobProgress(
-                  jobId!,
-                  `Upserting sets: ${Math.min(end, sets.length)}/${sets.length} processed...`
-                );
-              });
-            }
-          }
-
-          // Update CSV metadata
-          await step.run('update-sets-metadata', async () => {
-            const catalogService = new LegoCatalogService(supabaseServer);
-            await catalogService.updateCsvFileMetadata('sets.csv.gz', {
-              ...setsFile.metadata,
-              last_downloaded_at: new Date().toISOString(),
-            });
+        // Update CSV metadata
+        await step.run('update-sets-metadata', async () => {
+          const catalogService = new LegoCatalogService(supabaseServer);
+          await catalogService.updateCsvFileMetadata('sets.csv.gz', {
+            ...setsFile.metadata,
+            last_downloaded_at: new Date().toISOString(),
           });
+        });
 
-          // Estimate new vs updated (simplified)
-          totalSetsNew = Math.floor(totalSetsFound * 0.1); // Rough estimate: 10% new
-          totalSetsUpdated = totalSetsFound - totalSetsNew;
-        }
+        // Estimate new vs updated (simplified)
+        totalSetsNew = Math.floor(totalSetsFound * 0.1); // Rough estimate: 10% new
+        totalSetsUpdated = totalSetsFound - totalSetsNew;
       }
 
       // Step 6: Update final metadata and complete job

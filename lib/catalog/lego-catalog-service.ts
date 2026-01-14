@@ -7,6 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/supabase.types';
 
 const REBRICKABLE_CDN_BASE_URL = 'https://cdn.rebrickable.com/media/downloads/';
+const REBRICKABLE_IMAGE_BASE_URL = 'https://cdn.rebrickable.com/media/sets/';
 
 // Exported interfaces for use by Inngest function
 export interface CsvFileMetadata {
@@ -247,7 +248,7 @@ export class LegoCatalogService {
   /**
    * Download CSV file from Rebrickable CDN
    */
-  private async downloadCsvFile(filename: string): Promise<string> {
+  async downloadCsvFile(filename: string): Promise<string> {
     const csvUrl = `${REBRICKABLE_CDN_BASE_URL}${filename}`;
 
     const response = await fetch(csvUrl);
@@ -286,19 +287,25 @@ export class LegoCatalogService {
   /**
    * Parse sets CSV content
    */
-  private async parseSetsCsv(csvContent: string): Promise<LegoSetData[]> {
+  async parseSetsCsv(csvContent: string): Promise<LegoSetData[]> {
     const records = await this.parseCsvContent(csvContent, ['year', 'theme_id', 'num_parts']);
     
-    return records.map((record) => ({
-      set_num: record.set_num || '',
-      name: record.name || '',
-      year: record.year ?? null,
-      theme_id: record.theme_id ?? null,
-      num_parts: record.num_parts ?? null,
-      set_img_url: record.set_img_url || null,
-      set_url: record.set_url || null,
-      last_modified: record.last_modified_dt || null,
-    }));
+    return records.map((record) => {
+      const setNum = record.set_num || '';
+      // Construct image URL from set_num if CSV doesn't provide it
+      const setImgUrl = record.set_img_url || (setNum ? `${REBRICKABLE_IMAGE_BASE_URL}${setNum}.jpg` : null);
+      
+      return {
+        set_num: setNum,
+        name: record.name || '',
+        year: record.year ?? null,
+        theme_id: record.theme_id ?? null,
+        num_parts: record.num_parts ?? null,
+        set_img_url: setImgUrl,
+        set_url: record.set_url || null,
+        last_modified: record.last_modified_dt || null,
+      };
+    });
   }
 
   /**
