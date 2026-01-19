@@ -431,6 +431,10 @@ export class EbayAdapter implements MarketplaceAdapter {
       item_location: null,
       estimated_availabilities: null,
       buying_options: [],
+      // Sanitised fields - will be populated by sanitize service
+      sanitised_title: null,
+      sanitised_description: null,
+      sanitised_at: null,
     };
   }
 
