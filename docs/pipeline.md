@@ -1,10 +1,10 @@
 # Data Pipeline Documentation
 
-This document describes how data flows through the LEGO marketplace scraper system, including all five pipeline jobs: **Capture**, **Materialize**, **Enrich**, **Analyze**, and **Reconcile**.
+This document describes how data flows through the LEGO marketplace scraper system, including all six pipeline jobs: **Capture**, **Materialize**, **Sanitize**, **Enrich**, **Analyze**, and **Reconcile**.
 
 ## Pipeline Overview
 
-The system processes data through five sequential stages that transform raw marketplace API responses into analyzed, structured listing data with LEGO set associations.
+The system processes data through six sequential stages that transform raw marketplace API responses into analyzed, structured listing data with LEGO set associations.
 
 ```mermaid
 flowchart TB
@@ -60,6 +60,7 @@ sequenceDiagram
     participant User
     participant Capture as Capture Job
     participant Materialize as Materialize Job
+    participant Sanitize as Sanitize Job
     participant Enrich as Enrich Job
     participant Analyze as Analyze Job
     participant Reconcile as Reconcile Job
@@ -79,6 +80,15 @@ sequenceDiagram
     Materialize->>Materialize: Deduplicate listings
     Materialize->>DB: Insert new / Update existing in listings
     Materialize-->>User: Materialize Complete
+    
+    User->>Sanitize: Trigger Sanitize Job
+    Sanitize->>DB: Query unsanitized listings
+    loop For each listing
+        Sanitize->>Sanitize: Remove HTML markup
+        Sanitize->>Sanitize: Normalize whitespace
+        Sanitize->>DB: Update sanitised_title, sanitised_description
+    end
+    Sanitize-->>User: Sanitization Complete
     
     User->>Enrich: Trigger Enrich Job (Optional)
     Enrich->>DB: Query unenriched listings
@@ -102,7 +112,7 @@ sequenceDiagram
     User->>Reconcile: Trigger Reconcile Job
     Reconcile->>DB: Query analyzed listings
     loop For each listing
-        Reconcile->>Reconcile: Extract LEGO Set IDs from text
+        Reconcile->>Reconcile: Extract LEGO Set IDs from sanitised text
         Reconcile->>DB: Validate IDs against catalog.lego_sets
         Reconcile->>DB: Create join records in listing_lego_set_joins
     end
@@ -223,7 +233,57 @@ raw_listings (by captureJobId) → Transform → Deduplicate → listings (new/u
 
 **Note**: The Materialize job is automatically triggered by the Capture job upon completion. However, it can also be triggered manually if needed.
 
-## Job 3: Enrich
+## Job 3: Sanitize
+
+**Purpose**: Clean HTML markup from listing title and description fields, converting them to plain text.
+
+**Process**:
+1. Queries `pipeline.listings` for unsanitized listings (`sanitised_at IS NULL`)
+2. For each listing, sanitizes `title` and `description` fields:
+   - Removes all HTML tags and markup
+   - Removes images, SVGs, scripts, styles, and CSS
+   - Extracts text content from visible elements
+   - Normalizes whitespace (condenses multiple newlines to at most one blank line)
+3. Stores sanitized values in `sanitised_title` and `sanitised_description` fields
+4. Marks listing as sanitized with `sanitised_at` timestamp
+
+**Key Features**:
+- **HTML-to-text conversion**: Uses `html-to-text` library for reliable HTML parsing
+- **Whitespace normalization**: Condenses multiple consecutive newlines to at most one blank line
+- **Batch processing**: Processes listings in batches of 50 per Inngest step
+- **Selective processing**: Can sanitize specific listings by ID or all unsanitized listings
+- **Graceful handling**: Handles plain text gracefully (no-op if no HTML present)
+
+**Data Flow**:
+```
+listings (unsanitized) → Sanitize HTML → listings (sanitised_title, sanitised_description)
+```
+
+**Job Type**: `sanitize_listings`
+
+**Timeout**: 30 minutes
+
+**API Endpoint**: `POST /api/sanitize/trigger`
+
+### Sanitize Job Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `listingIds` | `string[]` | No | `undefined` | Array of specific listing IDs to sanitize. If not provided, processes all unsanitized listings. |
+| `limit` | `number` | No | `undefined` | Maximum number of listings to sanitize. If not provided, processes all unsanitized listings. |
+
+### Example Request
+
+```json
+{
+  "listingIds": ["123e4567-e89b-12d3-a456-426614174000"],
+  "limit": 1000
+}
+```
+
+**Note**: The sanitize job should be run after materialization to prepare listings for analysis. The reconcile job uses sanitized fields exclusively.
+
+## Job 4: Enrich
 
 **Purpose**: Enhance existing listings with detailed information from the eBay Browse API.
 
@@ -275,7 +335,7 @@ listings (unenriched) → eBay Browse API getItem → raw_listings (enriched) �
 }
 ```
 
-## Job 4: Analyze
+## Job 5: Analyze
 
 **Purpose**: Extract key attributes from listings and evaluate value.
 
@@ -450,6 +510,7 @@ All data related to the capture and analysis pipeline:
 
 - **`listings`**: Structured listing data
   - Basic fields: `title`, `description`, `price`, `currency`, `url`, `image_urls`, etc.
+  - Sanitised fields: `sanitised_title`, `sanitised_description`, `sanitised_at`
   - Enrichment fields: `description`, `additional_images`, `condition_description`, `category_path`, `item_location`, `estimated_availabilities`, `buying_options`
   - Tracking fields: `first_seen_at`, `last_seen_at`, `enriched_at`
   - Unique constraint: `(marketplace, external_id)`
@@ -466,7 +527,7 @@ All data related to the capture and analysis pipeline:
   - Unique constraint on `(listing_id, lego_set_id)` prevents duplicates
 
 - **`jobs`**: Job tracking for async operations
-  - Job types: `ebay_refresh_listings`, `ebay_materialize_listings`, `ebay_enrich_listings`, `analyze_listings`, `reconcile`
+  - Job types: `ebay_refresh_listings`, `ebay_materialize_listings`, `ebay_enrich_listings`, `sanitize_listings`, `analyze_listings`, `reconcile`
   - Includes progress tracking (`updated_at`, `last_update`), timeout management (`timeout_at`), and statistics
   - Metadata field (JSONB) stores job-specific parameters
 
@@ -486,6 +547,7 @@ All asynchronous operations in the pipeline are managed through a unified job pr
 | `ebay_refresh_listings` (Capture) | 30 minutes |
 | `ebay_materialize_listings` (Materialize) | 30 minutes |
 | `ebay_enrich_listings` (Enrich) | 60 minutes |
+| `sanitize_listings` (Sanitize) | 30 minutes |
 | `analyze_listings` (Analyze) | 15 minutes |
 | `reconcile` (Reconcile) | 15 minutes |
 | Default (unknown types) | 30 minutes |
@@ -512,6 +574,7 @@ The frontend UI (`/backend/resources/jobs`) provides real-time job monitoring:
 | `/api/capture/trigger` | POST | Trigger capture job | `ebay_refresh_listings` |
 | `/api/materialize/trigger` | POST | Trigger materialize job | `ebay_materialize_listings` |
 | `/api/capture/enrich` | POST | Trigger enrichment job | `ebay_enrich_listings` |
+| `/api/sanitize/trigger` | POST | Trigger sanitize job | `sanitize_listings` |
 | `/api/analyze/trigger` | POST | Trigger analysis job | `analyze_listings` |
 | `/api/reconcile/trigger` | POST | Trigger reconcile job | `reconcile` |
 | `/api/jobs` | GET | View all jobs with optional filtering | - |
@@ -526,6 +589,7 @@ The frontend UI (`/backend/resources/jobs`) provides real-time job monitoring:
 4. **Page-Level Steps**: Capture job uses page-level Inngest steps to prevent timeouts and enable cancellation
 5. **Stream Processing**: Data is stored immediately to avoid "output too large" errors
 6. **Optional Enrichment**: Enrichment is a separate, optional step that can be run independently
+7. **Text Sanitization**: Sanitize job removes HTML markup from listings to prepare clean text for analysis and reconciliation
 7. **Schema Separation**: Pipeline data is isolated from user data for better organization and security
 8. **Modular Value Evaluation**: Value evaluators are pluggable, allowing different evaluation strategies
 9. **Deduplication**: Prevents duplicate listings while tracking when listings are seen again
@@ -535,3 +599,4 @@ The frontend UI (`/backend/resources/jobs`) provides real-time job monitoring:
 13. **Progress Tracking**: Jobs report progress at regular intervals for visibility and stale detection
 14. **Automatic Timeout Detection**: Hybrid approach ensures stale jobs are detected and marked
 15. **Type-Specific Timeouts**: Different job types have appropriate timeout durations based on expected execution time
+16. **Sanitized Text Processing**: Reconcile job uses sanitized fields exclusively to ensure clean text extraction without HTML markup interference

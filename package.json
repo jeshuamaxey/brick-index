@@ -17,7 +17,7 @@
     "seed:load-ebay-snapshot-into-supabase": "tsx scripts/load-ebay-snapshot-into-supabase.ts",
     "seed:delete-ebay-snapshots": "tsx scripts/delete-ebay-snapshots.ts",
     "test:ebay-token": "tsx scripts/test-ebay-token.ts",
-    "generate:supabase-types": "supabase gen types typescript --local > lib/supabase/supabase.autogen.ts"
+    "gen:sb-types": "supabase gen types typescript --local > lib/supabase/supabase.autogen.ts"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.3",
@@ -39,6 +39,7 @@
     "clsx": "^2.1.1",
     "csv-parse": "^6.1.0",
     "event-notification-nodejs-sdk": "^1.0.3",
+    "html-to-text": "^9.0.5",
     "inngest": "^3.48.0",
     "lucide-react": "^0.561.0",
     "msw": "^2.12.4",
@@ -54,6 +55,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/html-to-text": "^9.0.4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

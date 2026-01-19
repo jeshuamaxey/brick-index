@@ -65,13 +65,14 @@ export class ReconcileService {
     }
 
     console.log(`[ReconcileService] Listing ${listingId} fetched:`, {
-      title: listing.title?.substring(0, 50) + '...',
-      hasDescription: !!listing.description,
-      descriptionLength: listing.description?.length || 0,
+      title: listing.sanitised_title?.substring(0, 50) || 'N/A',
+      hasDescription: !!listing.sanitised_description,
+      descriptionLength: listing.sanitised_description?.length || 0,
     });
 
-    // Combine title and description for extraction
-    const text = [listing.title, listing.description]
+    // Combine sanitised title and description for extraction
+    // Only use sanitised fields - do not use regular title/description
+    const text = [listing.sanitised_title, listing.sanitised_description]
       .filter(Boolean)
       .join(' ');
 

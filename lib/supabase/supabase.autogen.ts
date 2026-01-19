@@ -366,6 +366,9 @@ export type Database = {
           raw_listing_id: string
           reconciled_at: string | null
           reconciliation_version: string | null
+          sanitised_at: string | null
+          sanitised_description: string | null
+          sanitised_title: string | null
           seller_name: string | null
           seller_rating: number | null
           status: string | null
@@ -397,6 +400,9 @@ export type Database = {
           raw_listing_id: string
           reconciled_at?: string | null
           reconciliation_version?: string | null
+          sanitised_at?: string | null
+          sanitised_description?: string | null
+          sanitised_title?: string | null
           seller_name?: string | null
           seller_rating?: number | null
           status?: string | null
@@ -428,6 +434,9 @@ export type Database = {
           raw_listing_id?: string
           reconciled_at?: string | null
           reconciliation_version?: string | null
+          sanitised_at?: string | null
+          sanitised_description?: string | null
+          sanitised_title?: string | null
           seller_name?: string | null
           seller_rating?: number | null
           status?: string | null
@@ -528,6 +537,7 @@ export type Database = {
         | "lego_catalog_refresh"
         | "ebay_materialize_listings"
         | "reconcile"
+        | "sanitize_listings"
     }
     CompositeTypes: {
       [_ in never]: never

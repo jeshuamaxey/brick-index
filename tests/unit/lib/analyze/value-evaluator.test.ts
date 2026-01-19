@@ -38,6 +38,9 @@ describe('SimplePricePerPieceEvaluator', () => {
       item_location: null,
       estimated_availabilities: null,
       buying_options: [],
+      sanitised_title: null,
+      sanitised_description: null,
+      sanitised_at: null,
     };
 
     const analysis: ListingAnalysis = {
@@ -91,6 +94,9 @@ describe('SimplePricePerPieceEvaluator', () => {
       item_location: null,
       estimated_availabilities: null,
       buying_options: [],
+      sanitised_title: null,
+      sanitised_description: null,
+      sanitised_at: null,
     };
 
     const analysis: ListingAnalysis = {
@@ -144,6 +150,9 @@ describe('SimplePricePerPieceEvaluator', () => {
       item_location: null,
       estimated_availabilities: null,
       buying_options: [],
+      sanitised_title: null,
+      sanitised_description: null,
+      sanitised_at: null,
     };
 
     const analysis: ListingAnalysis = {
@@ -197,6 +206,9 @@ describe('SimplePricePerPieceEvaluator', () => {
       item_location: null,
       estimated_availabilities: null,
       buying_options: [],
+      sanitised_title: null,
+      sanitised_description: null,
+      sanitised_at: null,
     };
 
     const analysis: ListingAnalysis = {
