@@ -19,6 +19,7 @@ interface ReconcileJobEvent {
     limit?: number;
     reconciliationVersion?: string;
     cleanupMode?: 'delete' | 'supersede' | 'keep';
+    rerun?: boolean;
   };
 }
 
@@ -36,6 +37,7 @@ export const reconcileJob = inngest.createFunction(
       limit,
       reconciliationVersion,
       cleanupMode = 'supersede',
+      rerun = false,
     } = event.data;
 
     // Use provided version or default to current version
@@ -45,6 +47,7 @@ export const reconcileJob = inngest.createFunction(
     console.log('[Reconcile Job] Configuration:', {
       reconciliationVersion: versionToUse,
       cleanupMode,
+      rerun,
       hasListingIds: !!listingIds,
       listingIdsCount: listingIds?.length || 0,
       limit: limit || 'no limit',
@@ -62,6 +65,7 @@ export const reconcileJob = inngest.createFunction(
           limit: limit || null,
           reconciliationVersion: versionToUse,
           cleanupMode: cleanupMode,
+          rerun: rerun,
         }
       );
       console.log('[Reconcile Job] Job created:', { jobId: createdJob.id, status: createdJob.status });
@@ -106,12 +110,13 @@ export const reconcileJob = inngest.createFunction(
       });
 
       listingIdsToReconcile = await step.run('find-listings', async () => {
-        console.log('[Reconcile Job] Querying listings table directly for unreconciled listings...');
+        console.log('[Reconcile Job] Querying listings table directly for listings to reconcile...');
         
-        // Query listings table directly for unreconciled listings
+        // Query listings table directly for listings to reconcile
         // Listings that either:
         // 1. Have NOT been reconciled (reconciled_at IS NULL), OR
         // 2. Have been reconciled with an older version (reconciliation_version != current version)
+        // 3. If rerun=true: Also include listings reconciled with the current version (reconciliation_version == current version)
         // We need to fetch all active listings and filter in code since Supabase doesn't support complex OR with NULL easily
         let query = supabaseServer
           .schema('pipeline')
@@ -141,25 +146,31 @@ export const reconcileJob = inngest.createFunction(
 
         // Filter listings that need reconciliation:
         // 1. Not reconciled (reconciled_at IS NULL), OR
-        // 2. Reconciled with different version
-        const unreconciledListings = listings.filter(
-          (listing) =>
-            listing.reconciled_at === null ||
-            listing.reconciliation_version !== versionToUse
+        // 2. Reconciled with different version, OR
+        // 3. If rerun=true: Also include listings reconciled with the current version
+        const listingsToReconcile = listings.filter(
+          (listing) => {
+            const notReconciled = listing.reconciled_at === null;
+            const differentVersion = listing.reconciliation_version !== versionToUse;
+            const sameVersionRerun = rerun && listing.reconciliation_version === versionToUse;
+            
+            return notReconciled || differentVersion || sameVersionRerun;
+          }
         );
 
         console.log('[Reconcile Job] Filter results:', {
           totalListings: listings.length,
-          needsReconciliation: unreconciledListings.length,
-          alreadyReconciled: listings.length - unreconciledListings.length,
+          needsReconciliation: listingsToReconcile.length,
+          alreadyReconciled: listings.length - listingsToReconcile.length,
+          rerun: rerun,
         });
 
-        let listingIds = unreconciledListings.map((l) => l.id);
+        let listingIds = listingsToReconcile.map((l) => l.id);
 
         // Apply limit if provided
         if (limit) {
           listingIds = listingIds.slice(0, limit);
-          console.log('[Reconcile Job] Applied limit:', listingIds.length, 'of', unreconciledListings.length);
+          console.log('[Reconcile Job] Applied limit:', listingIds.length, 'of', listingsToReconcile.length);
         }
 
         console.log('[Reconcile Job] Returning', listingIds.length, 'listing IDs to reconcile');

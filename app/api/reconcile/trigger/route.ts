@@ -11,11 +11,13 @@ export async function POST(request: NextRequest) {
       limit,
       reconciliationVersion,
       cleanupMode,
+      rerun,
     }: {
       listingIds?: string[];
       limit?: number;
       reconciliationVersion?: string;
       cleanupMode?: 'delete' | 'supersede' | 'keep';
+      rerun?: boolean;
     } = body;
 
     // Send Inngest event to trigger reconcile job
@@ -26,6 +28,7 @@ export async function POST(request: NextRequest) {
         limit,
         reconciliationVersion,
         cleanupMode,
+        rerun,
       },
     });
 

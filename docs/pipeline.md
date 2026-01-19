@@ -6,52 +6,14 @@ This document describes how data flows through the LEGO marketplace scraper syst
 
 The system processes data through three sequential stages that transform raw marketplace API responses into analyzed, structured listing data with LEGO set associations.
 
-```mermaid
-flowchart TB
-    subgraph Stage1["Stage 1: Collection"]
-        direction LR
-        A[Capture] 
-        B[Enrich]
-        A --> B
-        A -->|output| A1[raw_listings]
-        B -->|output| B1[raw_listing_details]
-    end
-    
-    subgraph Stage2["Stage 2: Transform"]
-        direction LR
-        C[Materialize]
-        D[Sanitize]
-        E[Reconcile]
-        C --> D
-        D --> E
-        C -->|output| C1[listings]
-        E -->|output| E1[listing_lego_set_joins]
-    end
-    
-    subgraph Stage3["Stage 3: Analyze"]
-        direction LR
-        F[Analyze]
-        F -->|output| F1[listing_analysis]
-    end
-    
-    B --> C
-    E --> F
-    
-    style Stage1 fill:#e5e7eb,stroke:#6b7280
-    style Stage2 fill:#e5e7eb,stroke:#6b7280
-    style Stage3 fill:#e5e7eb,stroke:#6b7280
-    style A fill:#3b82f6,stroke:#1e40af,color:#fff
-    style B fill:#3b82f6,stroke:#1e40af,color:#fff
-    style C fill:#3b82f6,stroke:#1e40af,color:#fff
-    style D fill:#3b82f6,stroke:#1e40af,color:#fff
-    style E fill:#3b82f6,stroke:#1e40af,color:#fff
-    style F fill:#3b82f6,stroke:#1e40af,color:#fff
-    style A1 fill:#22c55e,stroke:#15803d,color:#fff
-    style B1 fill:#22c55e,stroke:#15803d,color:#fff
-    style C1 fill:#22c55e,stroke:#15803d,color:#fff
-    style E1 fill:#22c55e,stroke:#15803d,color:#fff
-    style F1 fill:#22c55e,stroke:#15803d,color:#fff
-```
+| Step Name | Stage | Description | Output |
+|-----------|-------|-------------|--------|
+| Capture | Collect | Searches marketplace APIs and stores raw listing data from search results. | `raw_listings` |
+| Enrich | Collect | Fetches detailed item information from marketplace APIs for each raw listing. | `raw_listing_details` |
+| Materialize | Transform | Transforms raw listings into structured listing records, merging search and enrichment data. | `listings` |
+| Sanitize | Transform | Removes HTML markup from listing titles and descriptions, converting them to clean plain text. | `listings` (updates `sanitised_title`, `sanitised_description`) |
+| Reconcile | Transform | Extracts LEGO set IDs from sanitized text and creates join records linking listings to LEGO sets. | `listing_lego_set_joins` |
+| Analyze | Analyze | Extracts attributes like piece count and minifig count, and calculates value metrics like price per piece. | `listing_analysis` |
 
 ## Data Flow Sequence
 
@@ -59,11 +21,6 @@ flowchart TB
 sequenceDiagram
     participant User
     participant Capture as Capture Job
-<<<<<<< Updated upstream
-    participant Materialize as Materialize Job
-    participant Sanitize as Sanitize Job
-=======
->>>>>>> Stashed changes
     participant Enrich as Enrich Job
     participant Materialize as Materialize Job
     participant Sanitize as Sanitize Job
@@ -98,7 +55,6 @@ sequenceDiagram
     Materialize-->>User: Materialize Complete
     
     User->>Sanitize: Trigger Sanitize Job
-<<<<<<< Updated upstream
     Sanitize->>DB: Query unsanitized listings
     loop For each listing
         Sanitize->>Sanitize: Remove HTML markup
@@ -107,19 +63,10 @@ sequenceDiagram
     end
     Sanitize-->>User: Sanitization Complete
     
-    User->>Enrich: Trigger Enrich Job (Optional)
-    Enrich->>DB: Query unenriched listings
-=======
-    Sanitize->>DB: Query listings
-    Sanitize->>Sanitize: Sanitize listing data
-    Sanitize->>DB: Update listings
-    Sanitize-->>User: Sanitize Complete
-    
     User->>Reconcile: Trigger Reconcile Job
     Reconcile->>DB: Query unreconciled listings (reconciled_at IS NULL)
->>>>>>> Stashed changes
     loop For each listing
-        Reconcile->>Reconcile: Extract LEGO Set IDs from text
+        Reconcile->>Reconcile: Extract LEGO Set IDs from sanitised text
         Reconcile->>DB: Validate IDs against catalog.lego_sets
         Reconcile->>DB: Create join records in listing_lego_set_joins
         Reconcile->>DB: Update listings.reconciled_at
@@ -134,18 +81,6 @@ sequenceDiagram
         Analyze->>DB: Store in listing_analysis
     end
     Analyze-->>User: Analysis Complete
-<<<<<<< Updated upstream
-    
-    User->>Reconcile: Trigger Reconcile Job
-    Reconcile->>DB: Query analyzed listings
-    loop For each listing
-        Reconcile->>Reconcile: Extract LEGO Set IDs from sanitised text
-        Reconcile->>DB: Validate IDs against catalog.lego_sets
-        Reconcile->>DB: Create join records in listing_lego_set_joins
-    end
-    Reconcile-->>User: Reconciliation Complete
-=======
->>>>>>> Stashed changes
 ```
 
 ## Job 1: Capture
@@ -309,8 +244,7 @@ raw_listings (by captureJobId) → Transform → Deduplicate → listings (new/u
 
 **Note**: The Materialize job should be triggered manually after capture and enrichment jobs complete.
 
-<<<<<<< Updated upstream
-## Job 3: Sanitize
+## Job 4: Sanitize
 
 **Purpose**: Clean HTML markup from listing title and description fields, converting them to plain text.
 
@@ -349,43 +283,7 @@ listings (unsanitized) → Sanitize HTML → listings (sanitised_title, sanitise
 | `listingIds` | `string[]` | No | `undefined` | Array of specific listing IDs to sanitize. If not provided, processes all unsanitized listings. |
 | `limit` | `number` | No | `undefined` | Maximum number of listings to sanitize. If not provided, processes all unsanitized listings. |
 
-### Example Request
-
-```json
-{
-  "listingIds": ["123e4567-e89b-12d3-a456-426614174000"],
-  "limit": 1000
-}
-```
-
-**Note**: The sanitize job should be run after materialization to prepare listings for analysis. The reconcile job uses sanitized fields exclusively.
-
-## Job 4: Enrich
-=======
-## Job 4: Sanitize
->>>>>>> Stashed changes
-
-**Purpose**: Sanitize listing data to prepare it for reconciliation.
-
-**Process**:
-1. Queries `pipeline.listings` table
-2. Sanitizes listing data (currently a placeholder job)
-3. Updates listings with sanitized data
-
-**Key Features**:
-- **Placeholder job**: Currently does not perform any business logic
-- **Future enhancement**: Will clean and normalize listing data before reconciliation
-
-**Data Flow**:
-```
-listings → Sanitize → listings (sanitized)
-```
-
-**Job Type**: `sanitize_listings`
-
-**Timeout**: 30 minutes
-
-**API Endpoint**: `POST /api/sanitize/trigger`
+**Note**: The sanitize job should be run after materialization to prepare listings for reconciliation. The reconcile job uses sanitized fields exclusively.
 
 ## Job 5: Reconcile
 
@@ -432,7 +330,7 @@ listings (unreconciled) → Text Extraction → ID Validation → listing_lego_s
 | `reconciliationVersion` | `string` | No | Current version | Version of reconciliation algorithm to use. Allows re-running listings with improved logic. |
 | `cleanupMode` | `string` | No | `'supersede'` | How to handle old join records: `'supersede'` (mark as superseded), `'delete'` (delete old records), or `'keep'` (keep all). |
 
-**Note**: If `listingIds` is provided, `limit` is ignored. If neither is provided, all unreconciled listings (where `reconciled_at IS NULL`) are processed. The job queries the `listings` table directly and does not rely on `listing_analysis`.
+**Note**: If `listingIds` is provided, `limit` is ignored. If neither is provided, all unreconciled listings (where `reconciled_at IS NULL`) are processed. The job queries the `listings` table directly and does not rely on `listing_analysis`. The reconcile job uses sanitized fields (`sanitised_title` and `sanitised_description`) exclusively to ensure clean text extraction without HTML markup interference.
 
 ### Example Requests
 
@@ -451,9 +349,6 @@ listings (unreconciled) → Text Extraction → ID Validation → listing_lego_s
 }
 ```
 
-<<<<<<< Updated upstream
-## Job 5: Analyze
-=======
 **Reconcile up to 500 unreconciled listings:**
 ```json
 {
@@ -462,7 +357,6 @@ listings (unreconciled) → Text Extraction → ID Validation → listing_lego_s
 ```
 
 ## Job 6: Analyze
->>>>>>> Stashed changes
 
 **Purpose**: Extract key attributes from listings and evaluate value.
 
@@ -592,11 +486,7 @@ All data related to the capture and analysis pipeline:
   - Unique constraint on `(listing_id, lego_set_id)` prevents duplicates
 
 - **`jobs`**: Job tracking for async operations
-<<<<<<< Updated upstream
-  - Job types: `ebay_refresh_listings`, `ebay_materialize_listings`, `ebay_enrich_listings`, `sanitize_listings`, `analyze_listings`, `reconcile`
-=======
   - Job types: `ebay_refresh_listings`, `ebay_enrich_listings`, `ebay_materialize_listings`, `sanitize_listings`, `reconcile`, `analyze_listings`
->>>>>>> Stashed changes
   - Includes progress tracking (`updated_at`, `last_update`), timeout management (`timeout_at`), and statistics
   - Metadata field (JSONB) stores job-specific parameters
 
@@ -615,13 +505,8 @@ All asynchronous operations in the pipeline are managed through a unified job pr
 |----------|----------------|
 | `ebay_refresh_listings` (Capture) | 30 minutes |
 | `ebay_enrich_listings` (Enrich) | 60 minutes |
-<<<<<<< Updated upstream
-| `sanitize_listings` (Sanitize) | 30 minutes |
-| `analyze_listings` (Analyze) | 15 minutes |
-=======
 | `ebay_materialize_listings` (Materialize) | 30 minutes |
 | `sanitize_listings` (Sanitize) | 30 minutes |
->>>>>>> Stashed changes
 | `reconcile` (Reconcile) | 15 minutes |
 | `analyze_listings` (Analyze) | 15 minutes |
 | Default (unknown types) | 30 minutes |
@@ -647,13 +532,8 @@ The frontend UI (`/backend/resources/jobs`) provides real-time job monitoring:
 |----------|--------|---------|------------------|
 | `/api/capture/trigger` | POST | Trigger capture job | `ebay_refresh_listings` |
 | `/api/capture/enrich` | POST | Trigger enrichment job | `ebay_enrich_listings` |
-<<<<<<< Updated upstream
-| `/api/sanitize/trigger` | POST | Trigger sanitize job | `sanitize_listings` |
-| `/api/analyze/trigger` | POST | Trigger analysis job | `analyze_listings` |
-=======
 | `/api/materialize/trigger` | POST | Trigger materialize job | `ebay_materialize_listings` |
 | `/api/sanitize/trigger` | POST | Trigger sanitize job | `sanitize_listings` |
->>>>>>> Stashed changes
 | `/api/reconcile/trigger` | POST | Trigger reconcile job | `reconcile` |
 | `/api/analyze/trigger` | POST | Trigger analysis job | `analyze_listings` |
 | `/api/jobs` | GET | View all jobs with optional filtering | - |
@@ -668,14 +548,14 @@ The frontend UI (`/backend/resources/jobs`) provides real-time job monitoring:
 4. **Page-Level Steps**: Capture job uses page-level Inngest steps to prevent timeouts and enable cancellation
 5. **Stream Processing**: Data is stored immediately to avoid "output too large" errors
 6. **Optional Enrichment**: Enrichment is a separate, optional step that can be run independently
-7. **Text Sanitization**: Sanitize job removes HTML markup from listings to prepare clean text for analysis and reconciliation
-7. **Schema Separation**: Pipeline data is isolated from user data for better organization and security
-8. **Modular Value Evaluation**: Value evaluators are pluggable, allowing different evaluation strategies
-9. **Deduplication**: Prevents duplicate listings while tracking when listings are seen again
-10. **Analysis Versioning**: Analysis records include version numbers for algorithm changes
-11. **Rate Limiting**: Enrichment includes configurable delays to prevent API abuse
-12. **Unified Job Processing**: All async operations use the same job tracking system for consistency
-13. **Progress Tracking**: Jobs report progress at regular intervals for visibility and stale detection
-14. **Automatic Timeout Detection**: Hybrid approach ensures stale jobs are detected and marked
-15. **Type-Specific Timeouts**: Different job types have appropriate timeout durations based on expected execution time
-16. **Sanitized Text Processing**: Reconcile job uses sanitized fields exclusively to ensure clean text extraction without HTML markup interference
+7. **Text Sanitization**: Sanitize job removes HTML markup from listings to prepare clean text for reconciliation and analysis
+8. **Schema Separation**: Pipeline data is isolated from user data for better organization and security
+9. **Modular Value Evaluation**: Value evaluators are pluggable, allowing different evaluation strategies
+10. **Deduplication**: Prevents duplicate listings while tracking when listings are seen again
+11. **Analysis Versioning**: Analysis records include version numbers for algorithm changes
+12. **Rate Limiting**: Enrichment includes configurable delays to prevent API abuse
+13. **Unified Job Processing**: All async operations use the same job tracking system for consistency
+14. **Progress Tracking**: Jobs report progress at regular intervals for visibility and stale detection
+15. **Automatic Timeout Detection**: Hybrid approach ensures stale jobs are detected and marked
+16. **Type-Specific Timeouts**: Different job types have appropriate timeout durations based on expected execution time
+17. **Sanitized Text Processing**: Reconcile job uses sanitized fields exclusively to ensure clean text extraction without HTML markup interference

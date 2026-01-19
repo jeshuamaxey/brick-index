@@ -468,13 +468,14 @@ export type Database = {
           },
         ]
       }
-      raw_listings: {
+      raw_listing_details: {
         Row: {
           api_response: Json
           created_at: string | null
           id: string
           job_id: string | null
           marketplace: string
+          raw_listing_id: string
         }
         Insert: {
           api_response: Json
@@ -482,10 +483,54 @@ export type Database = {
           id?: string
           job_id?: string | null
           marketplace: string
+          raw_listing_id: string
         }
         Update: {
           api_response?: Json
           created_at?: string | null
+          id?: string
+          job_id?: string | null
+          marketplace?: string
+          raw_listing_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "raw_listing_details_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "raw_listing_details_raw_listing_id_fkey"
+            columns: ["raw_listing_id"]
+            isOneToOne: true
+            referencedRelation: "raw_listings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      raw_listings: {
+        Row: {
+          api_response: Json
+          created_at: string | null
+          enriched_at: string | null
+          id: string
+          job_id: string | null
+          marketplace: string
+        }
+        Insert: {
+          api_response: Json
+          created_at?: string | null
+          enriched_at?: string | null
+          id?: string
+          job_id?: string | null
+          marketplace: string
+        }
+        Update: {
+          api_response?: Json
+          created_at?: string | null
+          enriched_at?: string | null
           id?: string
           job_id?: string | null
           marketplace?: string
