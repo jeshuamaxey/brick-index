@@ -37,7 +37,7 @@ const stages = [
       },
       {
         title: "Sanitize",
-        description: "Sanitizes listing data to prepare it for analysis. This job is currently a placeholder and does not perform any business logic.",
+        description: "Sanitizes listing title and description fields by removing HTML markup, images, scripts, and styles. Converts HTML to clean plain text while preserving text structure.",
         href: "/backend/actions/sanitize",
       },
       {

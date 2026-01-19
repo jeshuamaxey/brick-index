@@ -17,6 +17,8 @@ interface ListingDetail {
   id: string;
   title: string;
   description: string | null;
+  sanitised_title: string | null;
+  sanitised_description: string | null;
   price: number | null;
   currency: string | null;
   url: string;
@@ -63,6 +65,7 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
   const [analysis, setAnalysis] = useState<ListingAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showSanitized, setShowSanitized] = useState(true);
 
   useEffect(() => {
     const fetchListing = async () => {
@@ -147,22 +150,56 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
             <CardTitle>Basic Information</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div>
-              <Label className="text-sm font-medium mb-1 block">Title</Label>
-              <p className="text-sm text-foreground">{listing.title}</p>
-            </div>
-            <Separator />
-            {listing.description && (
-              <>
-                <div>
-                  <Label className="text-sm font-medium mb-1 block">Description</Label>
-                  <p className="text-sm text-foreground/80 whitespace-pre-wrap">
-                    {listing.description}
-                  </p>
-                </div>
-                <Separator />
-              </>
-            )}
+            {(() => {
+              // Determine if we should show toggle (both sanitized and unsanitized exist)
+              const hasSanitizedTitle = listing.sanitised_title !== null && listing.sanitised_title.trim() !== '';
+              const hasSanitizedDescription = listing.sanitised_description !== null && listing.sanitised_description.trim() !== '';
+              const hasTitle = listing.title !== null && listing.title.trim() !== '';
+              const hasDescription = listing.description !== null && listing.description.trim() !== '';
+              const showToggle = (hasSanitizedTitle && hasTitle) || (hasSanitizedDescription && hasDescription);
+
+              // Get display values (sanitized by default, fallback to regular)
+              const displayTitle = showSanitized && hasSanitizedTitle
+                ? listing.sanitised_title
+                : listing.title;
+              const displayDescription = showSanitized && hasSanitizedDescription
+                ? listing.sanitised_description
+                : listing.description;
+
+              return (
+                <>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <Label className="text-sm font-medium">Title</Label>
+                      {showToggle && (
+                        <button
+                          onClick={() => setShowSanitized(!showSanitized)}
+                          className="text-xs text-primary hover:underline"
+                          type="button"
+                        >
+                          {showSanitized ? 'Show Original' : 'Show Sanitized'}
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-sm text-foreground">{displayTitle || 'N/A'}</p>
+                  </div>
+                  <Separator />
+                  {(displayDescription || listing.description) && (
+                    <>
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <Label className="text-sm font-medium">Description</Label>
+                        </div>
+                        <p className="text-sm text-foreground/80 whitespace-pre-wrap">
+                          {displayDescription || listing.description || 'N/A'}
+                        </p>
+                      </div>
+                      <Separator />
+                    </>
+                  )}
+                </>
+              );
+            })()}
             <div className="flex items-center justify-between">
               <Label className="text-sm font-medium">Price</Label>
               <span className="text-sm font-semibold text-foreground">
