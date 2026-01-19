@@ -7,8 +7,10 @@ import { BaseJobService } from '@/lib/jobs/base-job-service';
 import { DeduplicationService } from '@/lib/capture/deduplication-service';
 import { EbayAdapter } from '@/lib/capture/marketplace-adapters/ebay-adapter';
 import { EbaySnapshotAdapter } from '@/lib/capture/marketplace-adapters/ebay-snapshot-adapter';
+import { extractEnrichmentFields } from '@/lib/capture/enrichment-utils';
 import type { MarketplaceAdapter } from '@/lib/capture/marketplace-adapters/base-adapter';
 import type { JobType, Listing } from '@/lib/types';
+import type { Json } from '@/lib/supabase/supabase.types';
 
 const BATCH_SIZE = 50; // Process 50 items per step to avoid timeout
 
@@ -83,7 +85,7 @@ export const materializeListingsJob = inngest.createFunction(
         const batchIds = rawListingIds.slice(start, end);
 
         const transformed = await step.run(`transform-batch-${i}`, async () => {
-          // Fetch raw listings from database
+          // Fetch raw listings
           const { data: rawListings, error: fetchError } = await supabaseServer
             .schema('pipeline')
             .from('raw_listings')
@@ -93,6 +95,29 @@ export const materializeListingsJob = inngest.createFunction(
           if (fetchError || !rawListings) {
             console.error('Error fetching raw listings:', fetchError);
             return [];
+          }
+
+          // Fetch enrichment details for these raw listings
+          const { data: rawListingDetails, error: detailsError } = await supabaseServer
+            .schema('pipeline')
+            .from('raw_listing_details')
+            .select('id, raw_listing_id, api_response')
+            .in('raw_listing_id', batchIds);
+
+          if (detailsError) {
+            console.error('Error fetching raw listing details:', detailsError);
+            // Continue without enrichment data rather than failing
+          }
+
+          // Create a map of raw_listing_id -> raw_listing_details for quick lookup
+          const detailsMap = new Map<string, { id: string; api_response: Json }>();
+          if (rawListingDetails) {
+            for (const detail of rawListingDetails) {
+              detailsMap.set(detail.raw_listing_id, {
+                id: detail.id,
+                api_response: detail.api_response,
+              });
+            }
           }
 
           // Create adapter again (can't serialize between steps)
@@ -118,10 +143,27 @@ export const materializeListingsJob = inngest.createFunction(
           const transformedListings: Listing[] = [];
           for (const rawListing of rawListings) {
             try {
+              // Transform base listing from search API response
               const listing = adapter.transformToListing(
                 rawListing.api_response as Record<string, unknown>,
                 rawListing.id
               );
+
+              // If enrichment data exists, extract and merge enrichment fields
+              const enrichmentDetail = detailsMap.get(rawListing.id);
+              if (enrichmentDetail && enrichmentDetail.api_response) {
+                // Extract enrichment fields from raw_listing_details
+                const enrichmentFields = extractEnrichmentFields(
+                  enrichmentDetail.api_response as Record<string, unknown>
+                );
+
+                // Merge enrichment fields into listing
+                Object.assign(listing, enrichmentFields);
+
+                // Set enriched_raw_listing_id to point to raw_listing_details.id
+                listing.enriched_raw_listing_id = enrichmentDetail.id;
+              }
+
               transformedListings.push(listing);
             } catch (error) {
               console.error('Error transforming listing:', error);

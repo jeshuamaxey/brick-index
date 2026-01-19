@@ -95,8 +95,8 @@ export const reconcileJob = inngest.createFunction(
       });
       console.log('[Reconcile Job] Using', listingIds.length, 'provided listing IDs');
     } else {
-      // Find listings that have been analyzed but not yet reconciled
-      console.log('[Reconcile Job] No listing IDs provided, finding listings to reconcile...');
+      // Find listings that have not yet been reconciled
+      console.log('[Reconcile Job] No listing IDs provided, finding unreconciled listings...');
       await step.run('update-progress-finding', async () => {
         const jobService = new BaseJobService(supabaseServer);
         await jobService.updateJobProgress(
@@ -106,80 +106,35 @@ export const reconcileJob = inngest.createFunction(
       });
 
       listingIdsToReconcile = await step.run('find-listings', async () => {
-        console.log('[Reconcile Job] Querying listing_analysis table...');
-        // Get all listing IDs that have analysis records
-        const { data: analyzedListings, error: analyzedError } =
-          await supabaseServer
-            .schema('pipeline')
-            .from('listing_analysis')
-            .select('listing_id');
+        console.log('[Reconcile Job] Querying listings table directly for unreconciled listings...');
+        
+        // Query listings table directly for unreconciled listings
+        // Listings that either:
+        // 1. Have NOT been reconciled (reconciled_at IS NULL), OR
+        // 2. Have been reconciled with an older version (reconciliation_version != current version)
+        // We need to fetch all active listings and filter in code since Supabase doesn't support complex OR with NULL easily
+        let query = supabaseServer
+          .schema('pipeline')
+          .from('listings')
+          .select('id, reconciliation_version, reconciled_at')
+          .eq('status', 'active');
 
-        if (analyzedError) {
-          console.error('[Reconcile Job] Error fetching analyzed listings:', analyzedError);
+        // Apply limit if provided (we'll filter after fetching)
+        if (limit) {
+          // Fetch more than limit to account for filtering, but cap at reasonable number
+          query = query.limit(limit * 2);
+        }
+
+        const { data: listings, error: listingsError } = await query;
+
+        if (listingsError) {
+          console.error('[Reconcile Job] Error fetching listings:', listingsError);
           throw new Error(
-            `Failed to fetch analyzed listings: ${analyzedError.message}`
+            `Failed to fetch listings: ${listingsError.message}`
           );
         }
 
-        console.log('[Reconcile Job] Found', analyzedListings?.length || 0, 'listing_analysis records');
-        const analyzedListingIds = new Set(
-          (analyzedListings || []).map((a) => a.listing_id)
-        );
-
-        console.log('[Reconcile Job] Unique analyzed listing IDs:', analyzedListingIds.size);
-
-        if (analyzedListingIds.size === 0) {
-          console.log('[Reconcile Job] No analyzed listings found, returning empty array');
-          return [];
-        }
-
-        // Fetch active listings that either:
-        // 1. Have NOT been reconciled (reconciled_at IS NULL), OR
-        // 2. Have been reconciled with an older version (reconciliation_version != current version)
-        // Batch the query to avoid "URI too long" errors when there are many IDs
-        const QUERY_BATCH_SIZE = 100; // Process IDs in batches to avoid URI length limits
-        const analyzedIdsArray = Array.from(analyzedListingIds);
-        const allListings: Array<{ id: string; reconciliation_version: string | null; reconciled_at: string | null }> = [];
-        
-        console.log('[Reconcile Job] Querying listings table for', analyzedListingIds.size, 'analyzed listing IDs in batches of', QUERY_BATCH_SIZE);
-        console.log('[Reconcile Job] Looking for listings with status=active and reconciliation_version !=', versionToUse);
-        
-        // Process in batches to avoid URI length limits
-        const maxBatches = limit ? Math.ceil(limit / QUERY_BATCH_SIZE) : Math.ceil(analyzedIdsArray.length / QUERY_BATCH_SIZE);
-        const totalIdsToQuery = limit ? Math.min(limit, analyzedIdsArray.length) : analyzedIdsArray.length;
-        
-        for (let i = 0; i < totalIdsToQuery; i += QUERY_BATCH_SIZE) {
-          const batch = analyzedIdsArray.slice(i, i + QUERY_BATCH_SIZE);
-          const batchNumber = Math.floor(i / QUERY_BATCH_SIZE) + 1;
-          console.log(`[Reconcile Job] Querying batch ${batchNumber}/${maxBatches} (${batch.length} IDs)`);
-          
-          const { data: batchListings, error: batchError } = await supabaseServer
-            .schema('pipeline')
-            .from('listings')
-            .select('id, reconciliation_version, reconciled_at')
-            .eq('status', 'active')
-            .in('id', batch);
-
-          if (batchError) {
-            console.error(`[Reconcile Job] Error fetching batch ${batchNumber}:`, batchError);
-            throw new Error(`Failed to fetch listings batch: ${batchError.message}`);
-          }
-
-          if (batchListings) {
-            allListings.push(...batchListings);
-            console.log(`[Reconcile Job] Batch ${batchNumber}: Found ${batchListings.length} active listings`);
-          }
-          
-          // If we have a limit and we've collected enough listings, stop querying
-          if (limit && allListings.length >= limit) {
-            console.log(`[Reconcile Job] Reached limit of ${limit} listings, stopping batch queries`);
-            break;
-          }
-        }
-
-        console.log('[Reconcile Job] Fetched', allListings.length, 'active listings total');
-
-        if (allListings.length === 0) {
+        if (!listings || listings.length === 0) {
           console.log('[Reconcile Job] No active listings found, returning empty array');
           return [];
         }
@@ -187,26 +142,24 @@ export const reconcileJob = inngest.createFunction(
         // Filter listings that need reconciliation:
         // 1. Not reconciled (reconciled_at IS NULL), OR
         // 2. Reconciled with different version
-        console.log('[Reconcile Job] Filtering listings that need reconciliation...');
-        const listingsToReconcile = allListings.filter(
+        const unreconciledListings = listings.filter(
           (listing) =>
             listing.reconciled_at === null ||
             listing.reconciliation_version !== versionToUse
         );
 
         console.log('[Reconcile Job] Filter results:', {
-          totalListings: allListings.length,
-          needsReconciliation: listingsToReconcile.length,
-          alreadyReconciled: allListings.length - listingsToReconcile.length,
+          totalListings: listings.length,
+          needsReconciliation: unreconciledListings.length,
+          alreadyReconciled: listings.length - unreconciledListings.length,
         });
 
-        const listingIds = listingsToReconcile.map((l) => l.id);
+        let listingIds = unreconciledListings.map((l) => l.id);
 
-        // If limit was provided, respect it
+        // Apply limit if provided
         if (limit) {
-          const limitedIds = listingIds.slice(0, limit);
-          console.log('[Reconcile Job] Applied limit:', limitedIds.length, 'of', listingIds.length);
-          return limitedIds;
+          listingIds = listingIds.slice(0, limit);
+          console.log('[Reconcile Job] Applied limit:', listingIds.length, 'of', unreconciledListings.length);
         }
 
         console.log('[Reconcile Job] Returning', listingIds.length, 'listing IDs to reconcile');

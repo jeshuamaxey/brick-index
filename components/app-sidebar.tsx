@@ -58,7 +58,7 @@ const data = {
       ],
     },
     {
-      title: "Enhance",
+      title: "Transform",
       url: "/backend/actions",
       items: [
         {
@@ -70,18 +70,18 @@ const data = {
           url: "/backend/actions/sanitize",
         },
         {
-          title: "Analyze",
-          url: "/backend/actions/analyze",
+          title: "Reconcile",
+          url: "/backend/actions/reconcile",
         },
       ],
     },
     {
-      title: "Reconcile",
+      title: "Analyze",
       url: "/backend/actions",
       items: [
         {
-          title: "Reconcile",
-          url: "/backend/actions/reconcile",
+          title: "Analyze",
+          url: "/backend/actions/analyze",
         },
       ],
     },
