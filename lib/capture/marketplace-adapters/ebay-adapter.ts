@@ -257,6 +257,14 @@ export class EbayAdapter implements MarketplaceAdapter {
 
     if (!response.ok) {
       const errorText = await response.text();
+      
+      // Explicitly detect authentication errors
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(
+          `eBay API authentication failed (${response.status}): ${response.statusText}. ${errorText}. Please check your EBAY_APP_ID and EBAY_CLIENT_SECRET credentials.`
+        );
+      }
+      
       throw new Error(
         `eBay API error: ${response.status} ${response.statusText}. ${errorText}`
       );
@@ -474,6 +482,13 @@ export class EbayAdapter implements MarketplaceAdapter {
         }
         if (response.status === 429) {
           throw new Error('Rate limit exceeded. Please retry after delay.');
+        }
+        // Explicitly detect authentication errors
+        if (response.status === 401 || response.status === 403) {
+          const errorText = await response.text();
+          throw new Error(
+            `eBay API authentication failed (${response.status}): ${response.statusText}. ${errorText}. Please check your EBAY_APP_ID and EBAY_CLIENT_SECRET credentials.`
+          );
         }
         const errorText = await response.text();
         throw new Error(
