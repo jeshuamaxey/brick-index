@@ -337,7 +337,7 @@ listings (unanalyzed) → Text Extraction → Value Evaluation → listing_analy
 }
 ```
 
-## Job 5: Reconcile
+### Job 6: Reconcile
 
 **Purpose**: Extract LEGO set IDs from listing titles and descriptions, validate them against the catalog, and create join records linking listings to LEGO sets.
 
