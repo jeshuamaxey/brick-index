@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Card,
   CardContent,
@@ -21,6 +22,7 @@ export default function ReconcilePage() {
   const [error, setError] = useState<string | null>(null);
   const [limit, setLimit] = useState('');
   const [listingIds, setListingIds] = useState('');
+  const [rerun, setRerun] = useState(false);
 
   const triggerReconcile = async () => {
     try {
@@ -31,6 +33,7 @@ export default function ReconcilePage() {
       const payload: {
         listingIds?: string[];
         limit?: number;
+        rerun?: boolean;
       } = {};
 
       if (listingIds.trim()) {
@@ -48,6 +51,10 @@ export default function ReconcilePage() {
         if (!isNaN(limitNum) && limitNum > 0) {
           payload.limit = limitNum;
         }
+      }
+
+      if (rerun) {
+        payload.rerun = true;
       }
 
       const response = await fetch('/api/reconcile/trigger', {
@@ -114,6 +121,23 @@ export default function ReconcilePage() {
                 />
                 <p className="text-xs text-muted-foreground">
                   Optional. Maximum number of analyzed listings to process. Ignored if listing IDs are provided.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="rerun"
+                    checked={rerun}
+                    onCheckedChange={(checked) => setRerun(checked === true)}
+                  />
+                  <Label htmlFor="rerun" className="text-sm font-normal cursor-pointer">
+                    Rerun reconciliation
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground ml-6">
+                  If enabled, will also process listings that were already reconciled with the current version. 
+                  Useful for re-running reconciliation on listings that were previously processed.
                 </p>
               </div>
             </div>

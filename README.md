@@ -142,10 +142,13 @@ See [Pipeline Documentation](./docs/pipeline.md) for a detailed description of h
 
 The pipeline flows as follows:
 
-1. **Capture**: Marketplace Search API (eBay) → Raw API responses stored in `pipeline.raw_listings` → Transformed into structured `pipeline.listings` (basic data)
-2. **Enrichment** (Optional): Unenriched `pipeline.listings` → Browse API `getItem` endpoint → Detailed data (description, images, condition, etc.) → Updated `pipeline.listings` with enrichment fields
-3. **Analyze**: `pipeline.listings` (with description) → Text extraction (piece count, minifigs, condition) → Value evaluation (price per piece) → Stored in `pipeline.listing_analysis`
-4. **Discover**: `pipeline.listings` + `pipeline.listing_analysis` + `public.searches` → Matching service finds relevant listings → Results stored in `public.search_results` → Email alerts sent via Resend
+1. **Capture**: Marketplace Search API (eBay) → Raw API responses stored in `pipeline.raw_listings`
+2. **Enrichment** (Optional): Unenriched `pipeline.raw_listings` → Browse API `getItem` endpoint → Detailed data stored in `pipeline.raw_listing_details`
+3. **Materialize**: `pipeline.raw_listings` + `pipeline.raw_listing_details` → Transformed into structured `pipeline.listings` (combines search and enrichment data)
+4. **Sanitize**: `pipeline.listings` → Sanitized listing data (placeholder job)
+5. **Reconcile**: `pipeline.listings` (unreconciled) → Extract LEGO set IDs → Validate against catalog → Create join records in `pipeline.listing_lego_set_joins` → Update `listings.reconciled_at`
+6. **Analyze**: `pipeline.listings` (with description) → Text extraction (piece count, minifigs, condition) → Value evaluation (price per piece) → Stored in `pipeline.listing_analysis`
+7. **Discover**: `pipeline.listings` + `pipeline.listing_analysis` + `public.searches` → Matching service finds relevant listings → Results stored in `public.search_results` → Email alerts sent via Resend
 
 ## Value Evaluation
 

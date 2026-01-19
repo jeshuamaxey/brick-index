@@ -8,10 +8,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const {
       marketplace = 'ebay',
+      captureJobId,
       limit,
       delayMs = 200,
     }: {
       marketplace?: string;
+      captureJobId?: string;
       limit?: number;
       delayMs?: number;
     } = body;
@@ -40,6 +42,7 @@ export async function POST(request: NextRequest) {
       name: 'job/enrich.triggered',
       data: {
         marketplace,
+        captureJobId,
         limit,
         delayMs,
       },

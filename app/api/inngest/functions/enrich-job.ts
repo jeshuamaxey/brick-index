@@ -10,101 +10,18 @@ import type { Database, Json } from '@/lib/supabase/supabase.types';
 
 const BATCH_SIZE = 50; // Process 50 listings per step to avoid timeout
 
-interface EbayGetItemResponse {
-  itemId?: string;
-  description?: string;
-  additionalImages?: Array<{ imageUrl?: string }>;
-  conditionDescription?: string;
-  categoryPath?: string;
-  itemLocation?: {
-    city?: string;
-    stateOrProvince?: string;
-    postalCode?: string;
-    country?: string;
-  };
-  estimatedAvailabilities?: Array<{
-    estimatedAvailabilityStatus?: string;
-    estimatedAvailableQuantity?: number;
-    estimatedSoldQuantity?: number;
-    estimatedRemainingQuantity?: number;
-  }>;
-  buyingOptions?: string[];
-  [key: string]: unknown;
-}
-
 interface EnrichJobEvent {
   name: 'job/enrich.triggered';
   data: {
     marketplace: string;
+    captureJobId?: string; // Optional: enrich specific capture job's raw listings
     limit?: number;
     delayMs?: number;
   };
 }
 
-/**
- * Extract enrichment fields from eBay getItem API response
- */
-function extractEnrichmentFields(response: EbayGetItemResponse): Record<string, unknown> {
-  const fields: Record<string, unknown> = {};
-
-  // Description
-  if (response.description !== undefined) {
-    fields.description = response.description;
-  }
-
-  // Additional images
-  if (response.additionalImages && Array.isArray(response.additionalImages)) {
-    fields.additional_images = response.additionalImages
-      .map((img) => img.imageUrl)
-      .filter((url): url is string => typeof url === 'string');
-  } else {
-    fields.additional_images = [];
-  }
-
-  // Condition description
-  if (response.conditionDescription !== undefined) {
-    fields.condition_description = response.conditionDescription;
-  }
-
-  // Category path
-  if (response.categoryPath !== undefined) {
-    fields.category_path = response.categoryPath;
-  }
-
-  // Item location
-  if (response.itemLocation) {
-    fields.item_location = {
-      city: response.itemLocation.city,
-      stateOrProvince: response.itemLocation.stateOrProvince,
-      postalCode: response.itemLocation.postalCode,
-      country: response.itemLocation.country,
-    };
-  }
-
-  // Estimated availabilities
-  if (
-    response.estimatedAvailabilities &&
-    Array.isArray(response.estimatedAvailabilities)
-  ) {
-    fields.estimated_availabilities = response.estimatedAvailabilities.map(
-      (avail) => ({
-        estimatedAvailabilityStatus: avail.estimatedAvailabilityStatus,
-        estimatedAvailableQuantity: avail.estimatedAvailableQuantity,
-        estimatedSoldQuantity: avail.estimatedSoldQuantity,
-        estimatedRemainingQuantity: avail.estimatedRemainingQuantity,
-      })
-    );
-  }
-
-  // Buying options
-  if (response.buyingOptions && Array.isArray(response.buyingOptions)) {
-    fields.buying_options = response.buyingOptions;
-  } else {
-    fields.buying_options = [];
-  }
-
-  return fields;
-}
+// Note: extractEnrichmentFields is no longer used here since we store raw data
+// and extract fields during materialisation. Keeping for reference if needed.
 
 import { INNGEST_FUNCTION_IDS } from './registry';
 
@@ -112,7 +29,7 @@ export const enrichJob = inngest.createFunction(
   { id: INNGEST_FUNCTION_IDS.ENRICH_JOB },
   { event: 'job/enrich.triggered' },
   async ({ event, step }) => {
-    const { marketplace, limit, delayMs = 200 } = event.data;
+    const { marketplace, captureJobId, limit, delayMs = 200 } = event.data;
 
     // Step 1: Create job record
     const job = await step.run('create-job', async () => {
@@ -122,26 +39,31 @@ export const enrichJob = inngest.createFunction(
         limit: limit || null,
         delayMs,
         marketplace,
+        captureJobId: captureJobId || null,
       });
     });
 
     const jobId = job.id;
 
-    // Step 3: Update progress - querying
+    // Step 2: Update progress - querying
     await step.run('update-progress-querying', async () => {
       const jobService = new BaseJobService(supabaseServer);
-      await jobService.updateJobProgress(jobId, 'Querying unenriched listings...');
+      await jobService.updateJobProgress(jobId, 'Querying unenriched raw listings...');
     });
 
-    // Step 4: Query unenriched listings
-    const listings = await step.run('query-listings', async () => {
+    // Step 3: Query unenriched raw listings
+    const rawListings = await step.run('query-raw-listings', async () => {
       let query = supabaseServer
         .schema('pipeline')
-        .from('listings')
-        .select('id, external_id, marketplace')
+        .from('raw_listings')
+        .select('id, api_response, marketplace')
         .is('enriched_at', null)
-        .eq('status', 'active')
         .eq('marketplace', marketplace);
+
+      // Filter by capture job if provided
+      if (captureJobId) {
+        query = query.eq('job_id', captureJobId);
+      }
 
       if (limit) {
         query = query.limit(limit);
@@ -150,20 +72,20 @@ export const enrichJob = inngest.createFunction(
       const { data, error } = await query;
 
       if (error) {
-        throw new Error(`Failed to query listings: ${error.message}`);
+        throw new Error(`Failed to query raw listings: ${error.message}`);
       }
 
       return data || [];
     });
 
-    if (listings.length === 0) {
+    if (rawListings.length === 0) {
       // Complete job with no work
       await step.run('complete-job-no-work', async () => {
         const jobService = new BaseJobService(supabaseServer);
         await jobService.completeJob(
           jobId,
           { listings_found: 0, listings_new: 0, listings_updated: 0 },
-          'No listings found to enrich'
+          'No raw listings found to enrich'
         );
       });
       return {
@@ -175,29 +97,29 @@ export const enrichJob = inngest.createFunction(
       };
     }
 
-    // Step 5: Update progress - found listings
+    // Step 4: Update progress - found raw listings
     await step.run('update-progress-found', async () => {
       const jobService = new BaseJobService(supabaseServer);
       await jobService.updateJobProgress(
         jobId,
-        `Found ${listings.length} listings to enrich...`,
-        { listings_found: listings.length }
+        `Found ${rawListings.length} raw listings to enrich...`,
+        { listings_found: rawListings.length }
       );
     });
 
-    // Step 6: Process listings in batches
+    // Step 5: Process raw listings in batches
     const result = {
       succeeded: 0,
       failed: 0,
-      errors: [] as Array<{ listingId: string; error: string }>,
+      errors: [] as Array<{ rawListingId: string; error: string }>,
     };
 
-    const batches = Math.ceil(listings.length / BATCH_SIZE);
+    const batches = Math.ceil(rawListings.length / BATCH_SIZE);
 
     for (let i = 0; i < batches; i++) {
       const start = i * BATCH_SIZE;
-      const end = Math.min(start + BATCH_SIZE, listings.length);
-      const batch = listings.slice(start, end);
+      const end = Math.min(start + BATCH_SIZE, rawListings.length);
+      const batch = rawListings.slice(start, end);
 
       // Process batch
       const batchResult = await step.run(`process-batch-${i}`, async () => {
@@ -227,51 +149,55 @@ export const enrichJob = inngest.createFunction(
         const batchStats = {
           succeeded: 0,
           failed: 0,
-          errors: [] as Array<{ listingId: string; error: string }>,
+          errors: [] as Array<{ rawListingId: string; error: string }>,
         };
 
-        for (const listing of batch) {
+        for (const rawListing of batch) {
           try {
-            // Call getItemDetails API
-            const enrichedResponse = await getItemDetails(listing.external_id);
+            // Extract itemId from raw_listings.api_response
+            const apiResponse = rawListing.api_response as Record<string, unknown>;
+            const itemId = apiResponse.itemId as string | undefined;
 
-            // Store raw enriched response
-            const { data: rawListing, error: rawError } = await supabaseServer
+            if (!itemId) {
+              throw new Error('itemId not found in raw_listings.api_response');
+            }
+
+            // Call getItemDetails API
+            const enrichedResponse = await getItemDetails(itemId);
+
+            // Store enriched response in raw_listing_details table
+            const { data: rawListingDetail, error: detailError } = await supabaseServer
               .schema('pipeline')
-              .from('raw_listings')
+              .from('raw_listing_details')
               .insert({
+                raw_listing_id: rawListing.id,
+                job_id: jobId,
                 marketplace,
                 api_response: enrichedResponse as Json,
               })
               .select('id')
               .single();
 
-            if (rawError) {
-              throw new Error(`Failed to store raw listing: ${rawError.message}`);
+            if (detailError) {
+              throw new Error(`Failed to store raw listing detail: ${detailError.message}`);
             }
 
-            if (!rawListing) {
-              throw new Error('Failed to store raw listing: No ID returned');
+            if (!rawListingDetail) {
+              throw new Error('Failed to store raw listing detail: No ID returned');
             }
 
-            // Extract fields from enriched response
-            const ebayResponse = enrichedResponse as EbayGetItemResponse;
-            const extractedFields = extractEnrichmentFields(ebayResponse);
-
-            // Update listing with enriched data
+            // Update raw_listings.enriched_at timestamp
+            const enrichedAt = new Date().toISOString();
             const { error: updateError } = await supabaseServer
               .schema('pipeline')
-              .from('listings')
+              .from('raw_listings')
               .update({
-                ...extractedFields,
-                enriched_at: new Date().toISOString(),
-                enriched_raw_listing_id: rawListing.id,
-                updated_at: new Date().toISOString(),
+                enriched_at: enrichedAt,
               })
-              .eq('id', listing.id);
+              .eq('id', rawListing.id);
 
             if (updateError) {
-              throw new Error(`Failed to update listing: ${updateError.message}`);
+              throw new Error(`Failed to update raw_listings.enriched_at: ${updateError.message}`);
             }
 
             batchStats.succeeded++;
@@ -280,11 +206,11 @@ export const enrichJob = inngest.createFunction(
             const errorMessage =
               error instanceof Error ? error.message : 'Unknown error';
             batchStats.errors.push({
-              listingId: listing.id,
+              rawListingId: rawListing.id,
               error: errorMessage,
             });
             console.error(
-              `Error enriching listing ${listing.id} (${listing.external_id}):`,
+              `Error enriching raw listing ${rawListing.id}:`,
               errorMessage
             );
           }
@@ -302,9 +228,9 @@ export const enrichJob = inngest.createFunction(
         const jobService = new BaseJobService(supabaseServer);
         await jobService.updateJobProgress(
           jobId,
-          `Enriching listing ${(i + 1) * BATCH_SIZE} of ${listings.length}...`,
+          `Enriching raw listing ${(i + 1) * BATCH_SIZE} of ${rawListings.length}...`,
           {
-            listings_found: listings.length,
+            listings_found: rawListings.length,
             listings_new: result.succeeded,
             listings_updated: result.failed,
           }
@@ -317,7 +243,7 @@ export const enrichJob = inngest.createFunction(
       }
     }
 
-    // Step 7: Update metadata with errors
+    // Step 6: Update metadata with errors
     await step.run('update-metadata', async () => {
       const { error: metadataError } = await supabaseServer
         .schema('pipeline')
@@ -327,6 +253,7 @@ export const enrichJob = inngest.createFunction(
             limit: limit || null,
             delayMs,
             marketplace,
+            captureJobId: captureJobId || null,
             errors: result.errors,
           } as Json,
         })
@@ -337,14 +264,14 @@ export const enrichJob = inngest.createFunction(
       }
     });
 
-    // Step 8: Complete or fail job
-    const finalStatus = result.failed === listings.length ? 'failed' : 'completed';
+    // Step 7: Complete or fail job
+    const finalStatus = result.failed === rawListings.length ? 'failed' : 'completed';
     const finalMessage =
       result.failed > 0 && result.succeeded === 0
-        ? `All ${listings.length} listings failed to enrich`
+        ? `All ${rawListings.length} raw listings failed to enrich`
         : result.failed > 0
         ? `Completed: ${result.succeeded} succeeded, ${result.failed} failed`
-        : `Completed: ${result.succeeded} listings enriched successfully`;
+        : `Completed: ${result.succeeded} raw listings enriched successfully`;
 
     await step.run('complete-job', async () => {
       const jobService = new BaseJobService(supabaseServer);
@@ -352,14 +279,14 @@ export const enrichJob = inngest.createFunction(
         await jobService.failJob(
           jobId,
           result.failed > 0 && result.succeeded === 0
-            ? `All ${listings.length} listings failed to enrich`
-            : `${result.failed} of ${listings.length} listings failed to enrich`
+            ? `All ${rawListings.length} raw listings failed to enrich`
+            : `${result.failed} of ${rawListings.length} raw listings failed to enrich`
         );
       } else {
         await jobService.completeJob(
           jobId,
           {
-            listings_found: listings.length,
+            listings_found: rawListings.length,
             listings_new: result.succeeded,
             listings_updated: result.failed,
           },
@@ -370,7 +297,7 @@ export const enrichJob = inngest.createFunction(
 
     return {
       jobId,
-      total: listings.length,
+      total: rawListings.length,
       succeeded: result.succeeded,
       failed: result.failed,
       errors: result.errors,

@@ -7,18 +7,7 @@ import { BaseJobService } from '@/lib/jobs/base-job-service';
 import { EbayAdapter, type EbaySearchParams } from '@/lib/capture/marketplace-adapters/ebay-adapter';
 import { getEbayAccessToken } from '@/lib/ebay/oauth-token-service';
 import type { JobType } from '@/lib/types';
-import type { Database, Json } from '@/lib/supabase/supabase.types';
-
-const BATCH_SIZE = 50; // Process 50 items per step to avoid timeout
-
-interface CaptureJobEvent {
-  name: 'job/capture.triggered';
-  data: {
-    marketplace: string;
-    keywords?: string[];
-    ebayParams?: unknown;
-  };
-}
+import type { Json } from '@/lib/supabase/supabase.types';
 
 import { INNGEST_FUNCTION_IDS } from './registry';
 
@@ -203,17 +192,6 @@ export const captureJob = inngest.createFunction(
           },
           `Completed: Captured ${listingsFound} raw listings`
         );
-      });
-
-      // Step 6: Trigger materialize job
-      await step.run('trigger-materialize-job', async () => {
-        await inngest.send({
-          name: 'job/materialize.triggered',
-          data: {
-            captureJobId: jobId!,
-            marketplace,
-          },
-        });
       });
 
       return {

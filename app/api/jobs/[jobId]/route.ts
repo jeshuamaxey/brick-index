@@ -87,6 +87,8 @@ export async function GET(
         listingId: string;
         title: string;
         description: string | null;
+        sanitisedTitle: string | null;
+        sanitisedDescription: string | null;
         extractedIds: Array<{ extractedId: string; validated: boolean }>;
       }> = [];
 
@@ -104,7 +106,7 @@ export async function GET(
           const { data: listingsData, error: listingsError } = await supabaseServer
             .schema('pipeline')
             .from('listings')
-            .select('id, title, description')
+            .select('id, title, description, sanitised_title, sanitised_description')
             .in('id', batch);
 
           if (listingsError) {
@@ -121,6 +123,8 @@ export async function GET(
                 listingId: listing.id,
                 title: listing.title || '',
                 description: listing.description,
+                sanitisedTitle: listing.sanitised_title || null,
+                sanitisedDescription: listing.sanitised_description || null,
                 extractedIds,
               });
             }

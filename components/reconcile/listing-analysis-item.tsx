@@ -17,6 +17,8 @@ interface ListingAnalysisItemProps {
   listingId: string;
   title: string;
   description: string | null;
+  sanitisedTitle?: string | null;
+  sanitisedDescription?: string | null;
   extractedIds: ExtractedId[];
   regexPattern: RegExp;
   onCopyListingId: (listingId: string) => void;
@@ -30,13 +32,18 @@ export function ListingAnalysisItem({
   listingId,
   title,
   description,
+  sanitisedTitle,
+  sanitisedDescription,
   extractedIds,
   regexPattern,
   onCopyListingId,
 }: ListingAnalysisItemProps) {
   // Count occurrences of each extracted ID in the text
+  // Use sanitized text if available, otherwise fall back to original
   const getOccurrenceCount = (id: string): number => {
-    const combinedText = [title, description].filter(Boolean).join(' ');
+    const titleText = sanitisedTitle || title;
+    const descText = sanitisedDescription || description;
+    const combinedText = [titleText, descText].filter(Boolean).join(' ');
     const regex = new RegExp(`\\b${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g');
     const matches = combinedText.match(regex);
     return matches ? matches.length : 0;
@@ -44,6 +51,10 @@ export function ListingAnalysisItem({
 
   // Get list of extracted ID strings for highlighting
   const extractedIdStrings = extractedIds.map((e) => e.extractedId);
+
+  // Use sanitized fields if available, otherwise fall back to original
+  const displayTitle = sanitisedTitle || title;
+  const displayDescription = sanitisedDescription || description;
 
   return (
     <Card className="w-full">
@@ -68,20 +79,44 @@ export function ListingAnalysisItem({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Title */}
-        <div>
-          <Label className="text-sm font-medium mb-2 block">Title</Label>
-          <div className="text-sm p-3 bg-muted/50 rounded border">
-            <RegexHighlightedText
-              text={title}
-              regexPattern={regexPattern}
-              extractedIds={extractedIdStrings}
-            />
+        {/* Sanitized Title */}
+        {sanitisedTitle ? (
+          <div>
+            <Label className="text-sm font-medium mb-2 block">Sanitized Title</Label>
+            <div className="text-sm p-3 bg-muted/50 rounded border">
+              <RegexHighlightedText
+                text={sanitisedTitle}
+                regexPattern={regexPattern}
+                extractedIds={extractedIdStrings}
+              />
+            </div>
           </div>
-        </div>
+        ) : (
+          <div>
+            <Label className="text-sm font-medium mb-2 block">Title</Label>
+            <div className="text-sm p-3 bg-muted/50 rounded border">
+              <RegexHighlightedText
+                text={title}
+                regexPattern={regexPattern}
+                extractedIds={extractedIdStrings}
+              />
+            </div>
+          </div>
+        )}
 
-        {/* Description */}
-        {description && (
+        {/* Sanitized Description */}
+        {sanitisedDescription ? (
+          <div>
+            <Label className="text-sm font-medium mb-2 block">Sanitized Description</Label>
+            <div className="text-sm p-3 bg-muted/50 rounded border max-h-96 overflow-y-auto">
+              <RegexHighlightedText
+                text={sanitisedDescription}
+                regexPattern={regexPattern}
+                extractedIds={extractedIdStrings}
+              />
+            </div>
+          </div>
+        ) : description ? (
           <div>
             <Label className="text-sm font-medium mb-2 block">Description</Label>
             <div className="text-sm p-3 bg-muted/50 rounded border max-h-96 overflow-y-auto">
@@ -92,7 +127,7 @@ export function ListingAnalysisItem({
               />
             </div>
           </div>
-        )}
+        ) : null}
 
         <Separator />
 

@@ -22,6 +22,8 @@ interface Listing {
   listingId: string;
   title: string;
   description: string | null;
+  sanitisedTitle?: string | null;
+  sanitisedDescription?: string | null;
   extractedIds: ExtractedId[];
 }
 
@@ -339,6 +341,8 @@ export default function ReconcileAnalysisPage() {
               listingId={selectedListing.listingId}
               title={selectedListing.title}
               description={selectedListing.description}
+              sanitisedTitle={selectedListing.sanitisedTitle}
+              sanitisedDescription={selectedListing.sanitisedDescription}
               extractedIds={selectedListing.extractedIds}
               regexPattern={regexPattern}
               onCopyListingId={handleCopyListingId}
