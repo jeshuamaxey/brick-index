@@ -130,3 +130,56 @@ See `docs/testing-reconcile-job.md` for comprehensive testing instructions.
 5. Test full job execution via API
 6. Verify metadata tracking
 7. Test re-reconciliation scenarios
+
+## Analysis UI (Added in Later Update)
+
+A dedicated UI has been added to analyze reconciliation job results and improve regex precision/recall:
+
+### UI Components
+
+1. **Reconciliation Analysis Page** (`app/backend/resources/reconcile/[jobId]/page.tsx`)
+   - Listing-centric view with three-panel layout
+   - Left sidebar: List of listings with extracted ID counts
+   - Center: Selected listing with highlighted regex matches
+   - Right panel: Unified notes field for feedback
+   - Keyboard navigation (↑/↓ arrows, Enter to focus notes)
+   - Export/copy notes functionality
+
+2. **Regex Pattern Service** (`lib/analyze/regex-pattern-service.ts`)
+   - Maps reconciliation versions to regex patterns
+   - Supports versioning for future regex updates
+   - Used by TextExtractor for consistent pattern application
+
+3. **Text Highlighting Component** (`components/reconcile/regex-highlighted-text.tsx`)
+   - Highlights regex matches in listing text
+   - Different colors for extracted IDs vs false positives
+   - Helps identify precision/recall issues
+
+4. **Listing Analysis Component** (`components/reconcile/listing-analysis-item.tsx`)
+   - Displays listing with extracted IDs
+   - Shows validated/not validated badges
+   - "Copy ID" button to append listing ID to notes
+
+### API Endpoints
+
+5. **GET /api/jobs/[jobId]** (`app/api/jobs/[jobId]/route.ts`)
+   - Generic job endpoint
+   - For reconcile jobs, enriches response with listing data
+   - Groups extracted IDs by listing (listing-centric structure)
+   - Batches listing queries to handle large datasets
+
+### Refactoring
+
+6. **TextExtractor** (`lib/analyze/text-extractor.ts`)
+   - Refactored to use RegexPatternService
+   - Accepts optional reconciliationVersion parameter
+   - Maintains backward compatibility
+
+### Navigation
+
+7. **Jobs Page Updates** (`app/backend/resources/jobs/page.tsx`)
+   - Added "Analyze" button for completed reconcile jobs
+   - Navigates to reconciliation analysis page
+
+8. **Job Detail Panel** (`components/jobs/job-detail-panel.tsx`)
+   - Added "Analyze Results" button for reconcile jobs

@@ -1,6 +1,7 @@
 // Extract information from listing text (title and description)
 
 import type { ExtractedData } from '@/lib/types';
+import { RegexPatternService } from './regex-pattern-service';
 
 export class TextExtractor {
   /**
@@ -134,17 +135,20 @@ export class TextExtractor {
    * Extract LEGO set IDs from text
    * Looks for patterns like "75192", "75192-1", "10294", "21330-1"
    * Pattern: 3-7 digits optionally followed by a dash and 1-2 digit version suffix
+   * @param text - Text to extract IDs from
+   * @param reconciliationVersion - Optional reconciliation version to use (defaults to current)
+   * @returns Array of unique extracted set IDs
    */
-  extractLegoSetIds(text: string): string[] {
+  extractLegoSetIds(text: string, reconciliationVersion?: string): string[] {
     if (!text) {
       return [];
     }
 
-    // Regex pattern: \b\d{3,7}(-\d{1,2})?\b
-    // \b - Word boundaries to avoid matching partial numbers
-    // \d{3,7} - Main set number (3-7 digits)
-    // (-\d{1,2})? - Optional version suffix (dash + 1-2 digits)
-    const legoSetIdPattern = /\b\d{3,7}(-\d{1,2})?\b/g;
+    // Get regex pattern based on version, or use default
+    const legoSetIdPattern = reconciliationVersion
+      ? RegexPatternService.getRegexPattern(reconciliationVersion)
+      : RegexPatternService.getDefaultPattern();
+    
     const matches = text.match(legoSetIdPattern);
 
     if (!matches) {

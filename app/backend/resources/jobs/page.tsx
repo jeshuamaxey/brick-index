@@ -4,7 +4,8 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, Copy, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, X, Search } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import {
   Sheet,
   SheetContent,
@@ -42,6 +43,7 @@ interface Job {
 const PAGE_SIZE = 50;
 
 export default function JobsPage() {
+  const router = useRouter();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -313,20 +315,36 @@ export default function JobsPage() {
                             </div>
                           </DataTableCell>
                           <DataTableCell className="px-2 py-2 text-xs">
-                            {job.status === 'running' && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleCancelJob(job.id);
-                                }}
-                                className="h-6 px-2 text-xs"
-                              >
-                                <X className="h-3 w-3 mr-1" />
-                                Cancel
-                              </Button>
-                            )}
+                            <div className="flex items-center gap-1">
+                              {job.type === 'reconcile' && job.status === 'completed' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    router.push(`/backend/resources/reconcile/${job.id}`);
+                                  }}
+                                  className="h-6 px-2 text-xs"
+                                  title="Analyze reconciliation results"
+                                >
+                                  <Search className="h-3 w-3" />
+                                </Button>
+                              )}
+                              {job.status === 'running' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleCancelJob(job.id);
+                                  }}
+                                  className="h-6 px-2 text-xs"
+                                >
+                                  <X className="h-3 w-3 mr-1" />
+                                  Cancel
+                                </Button>
+                              )}
+                            </div>
                           </DataTableCell>
                         </DataTableRow>
                       ))
