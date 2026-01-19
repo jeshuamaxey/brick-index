@@ -7,42 +7,50 @@ This document describes how data flows through the LEGO marketplace scraper syst
 The system processes data through five sequential stages that transform raw marketplace API responses into analyzed, structured listing data with LEGO set associations.
 
 ```mermaid
-flowchart LR
-    subgraph "Stage 1: Data Collection"
-        A[Capture Job] --> B[raw_listings]
+flowchart TB
+    subgraph Stage1["Stage 1: Collection"]
+        direction LR
+        A[Capture] 
+        B[Enrich]
+        A --> B
+        A -->|output| A1[raw_listings]
+        B -->|output| B1[raw_listings]
     end
     
-    subgraph "Stage 2: Data Transformation"
-        B --> C[Materialize Job]
-        C --> D[listings]
+    subgraph Stage2["Stage 2: Enhance"]
+        direction LR
+        C[Materialize]
+        D[Sanitize]
+        E[Analyze]
+        C --> D
+        D --> E
+        C -->|output| C1[listings]
+        E -->|output| E1[listing_analysis]
     end
     
-    subgraph "Stage 3: Data Enhancement"
-        D --> E[Enrich Job<br/>Optional]
-        E --> F[listings<br/>enriched]
+    subgraph Stage3["Stage 3: Reconcile"]
+        direction LR
+        F[Reconcile]
+        F -->|output| F1[listing_lego_set_joins]
     end
     
-    subgraph "Stage 4: Data Analysis"
-        D --> G[Analyze Job]
-        F --> G
-        G --> H[listing_analysis]
-    end
+    B --> C
+    E --> F
     
-    subgraph "Stage 5: Reconciliation"
-        H --> I[Reconcile Job]
-        I --> J[listing_lego_set_joins]
-    end
-    
-    style A fill:#dbeafe,stroke:#3b82f6
-    style C fill:#e0e7ff,stroke:#6366f1
-    style E fill:#bfdbfe,stroke:#3b82f6
-    style G fill:#fef3c7,stroke:#f59e0b
-    style I fill:#fce7f3,stroke:#ec4899
-    style B fill:#dcfce7,stroke:#22c55e
-    style D fill:#dcfce7,stroke:#22c55e
-    style F fill:#dcfce7,stroke:#22c55e
-    style H fill:#fef3c7,stroke:#f59e0b
-    style J fill:#fce7f3,stroke:#ec4899
+    style Stage1 fill:#e5e7eb,stroke:#6b7280
+    style Stage2 fill:#e5e7eb,stroke:#6b7280
+    style Stage3 fill:#e5e7eb,stroke:#6b7280
+    style A fill:#3b82f6,stroke:#1e40af,color:#fff
+    style B fill:#3b82f6,stroke:#1e40af,color:#fff
+    style C fill:#3b82f6,stroke:#1e40af,color:#fff
+    style D fill:#3b82f6,stroke:#1e40af,color:#fff
+    style E fill:#3b82f6,stroke:#1e40af,color:#fff
+    style F fill:#3b82f6,stroke:#1e40af,color:#fff
+    style A1 fill:#22c55e,stroke:#15803d,color:#fff
+    style B1 fill:#22c55e,stroke:#15803d,color:#fff
+    style C1 fill:#22c55e,stroke:#15803d,color:#fff
+    style E1 fill:#22c55e,stroke:#15803d,color:#fff
+    style F1 fill:#22c55e,stroke:#15803d,color:#fff
 ```
 
 ## Data Flow Sequence

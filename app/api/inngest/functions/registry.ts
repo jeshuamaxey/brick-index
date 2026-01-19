@@ -6,6 +6,7 @@ export const INNGEST_FUNCTION_IDS = {
   MATERIALIZE_LISTINGS_JOB: 'materialize-listings-job',
   ENRICH_JOB: 'enrich-job',
   ANALYZE_JOB: 'analyze-job',
+  SANITIZE_JOB: 'sanitize-job',
   CATALOG_REFRESH_JOB: 'catalog-refresh-job',
   RECONCILE_JOB: 'reconcile-job',
   HANDLE_JOB_CANCELLATION: 'handle-job-cancellation',
@@ -17,6 +18,7 @@ export const FUNCTION_TO_JOB_TYPE: Record<string, string> = {
   [INNGEST_FUNCTION_IDS.MATERIALIZE_LISTINGS_JOB]: 'ebay_materialize_listings',
   [INNGEST_FUNCTION_IDS.ENRICH_JOB]: 'ebay_enrich_listings',
   [INNGEST_FUNCTION_IDS.ANALYZE_JOB]: 'analyze_listings',
+  [INNGEST_FUNCTION_IDS.SANITIZE_JOB]: 'sanitize_listings',
   [INNGEST_FUNCTION_IDS.CATALOG_REFRESH_JOB]: 'lego_catalog_refresh',
   [INNGEST_FUNCTION_IDS.RECONCILE_JOB]: 'reconcile',
   // handle-job-cancellation doesn't have a job type (it's a system handler)

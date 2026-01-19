@@ -44,7 +44,7 @@ const data = {
       ],
     },
     {
-      title: "Actions",
+      title: "Collection",
       url: "/backend/actions",
       items: [
         {
@@ -52,16 +52,36 @@ const data = {
           url: "/backend/actions/capture",
         },
         {
+          title: "Enrich",
+          url: "/backend/actions/enrich",
+        },
+      ],
+    },
+    {
+      title: "Enhance",
+      url: "/backend/actions",
+      items: [
+        {
           title: "Materialize",
           url: "/backend/actions/materialize",
         },
         {
-          title: "Enrich",
-          url: "/backend/actions/enrich",
+          title: "Sanitize",
+          url: "/backend/actions/sanitize",
         },
         {
           title: "Analyze",
           url: "/backend/actions/analyze",
+        },
+      ],
+    },
+    {
+      title: "Reconcile",
+      url: "/backend/actions",
+      items: [
+        {
+          title: "Reconcile",
+          url: "/backend/actions/reconcile",
         },
       ],
     },
