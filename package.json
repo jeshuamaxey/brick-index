@@ -16,6 +16,7 @@
     "seed:enrich-ebay-snapshot": "tsx scripts/enrich-ebay-snapshot.ts",
     "seed:load-ebay-snapshot-into-supabase": "tsx scripts/load-ebay-snapshot-into-supabase.ts",
     "seed:delete-ebay-snapshots": "tsx scripts/delete-ebay-snapshots.ts",
+    "test:ebay-token": "tsx scripts/test-ebay-token.ts",
     "generate:supabase-types": "supabase gen types typescript --local > lib/supabase/supabase.autogen.ts"
   },
   "dependencies": {

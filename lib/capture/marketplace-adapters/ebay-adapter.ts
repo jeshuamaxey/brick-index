@@ -407,6 +407,8 @@ export class EbayAdapter implements MarketplaceAdapter {
       seller_name: sellerUserName,
       seller_rating: sellerRating,
       created_at: new Date().toISOString(),
+      reconciled_at: null,
+      reconciliation_version: null,
       updated_at: new Date().toISOString(),
       first_seen_at: new Date().toISOString(),
       last_seen_at: new Date().toISOString(),

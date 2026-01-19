@@ -17,6 +17,9 @@ export type LegoSet = Database['catalog']['Tables']['lego_sets']['Row'];
 export type Theme = Database['catalog']['Tables']['themes']['Row'];
 export type CsvFileMetadata = Database['catalog']['Tables']['csv_file_metadata']['Row'];
 
+// Join types
+export type LegoSetJoin = Database['pipeline']['Tables']['listing_lego_set_joins']['Row'];
+
 // Database enum types
 export type JobType = Database['pipeline']['Enums']['job_type'];
 

@@ -131,6 +131,31 @@ export class TextExtractor {
   }
 
   /**
+   * Extract LEGO set IDs from text
+   * Looks for patterns like "75192", "75192-1", "10294", "21330-1"
+   * Pattern: 3-7 digits optionally followed by a dash and 1-2 digit version suffix
+   */
+  extractLegoSetIds(text: string): string[] {
+    if (!text) {
+      return [];
+    }
+
+    // Regex pattern: \b\d{3,7}(-\d{1,2})?\b
+    // \b - Word boundaries to avoid matching partial numbers
+    // \d{3,7} - Main set number (3-7 digits)
+    // (-\d{1,2})? - Optional version suffix (dash + 1-2 digits)
+    const legoSetIdPattern = /\b\d{3,7}(-\d{1,2})?\b/g;
+    const matches = text.match(legoSetIdPattern);
+
+    if (!matches) {
+      return [];
+    }
+
+    // Remove duplicates and return unique set IDs
+    return Array.from(new Set(matches));
+  }
+
+  /**
    * Extract all data from listing text
    */
   extractAll(text: string): ExtractedData {

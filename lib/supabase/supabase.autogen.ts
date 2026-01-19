@@ -300,6 +300,47 @@ export type Database = {
           },
         ]
       }
+      listing_lego_set_joins: {
+        Row: {
+          created_at: string | null
+          id: string
+          lego_set_id: string
+          listing_id: string
+          nature: string
+          reconciliation_version: string
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          lego_set_id: string
+          listing_id: string
+          nature?: string
+          reconciliation_version: string
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          lego_set_id?: string
+          listing_id?: string
+          nature?: string
+          reconciliation_version?: string
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listing_lego_set_joins_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       listings: {
         Row: {
           additional_images: string[] | null
@@ -323,6 +364,8 @@ export type Database = {
           marketplace: string
           price: number | null
           raw_listing_id: string
+          reconciled_at: string | null
+          reconciliation_version: string | null
           seller_name: string | null
           seller_rating: number | null
           status: string | null
@@ -352,6 +395,8 @@ export type Database = {
           marketplace: string
           price?: number | null
           raw_listing_id: string
+          reconciled_at?: string | null
+          reconciliation_version?: string | null
           seller_name?: string | null
           seller_rating?: number | null
           status?: string | null
@@ -381,6 +426,8 @@ export type Database = {
           marketplace?: string
           price?: number | null
           raw_listing_id?: string
+          reconciled_at?: string | null
+          reconciliation_version?: string | null
           seller_name?: string | null
           seller_rating?: number | null
           status?: string | null
@@ -480,6 +527,7 @@ export type Database = {
         | "analyze_listings"
         | "lego_catalog_refresh"
         | "ebay_materialize_listings"
+        | "reconcile"
     }
     CompositeTypes: {
       [_ in never]: never
