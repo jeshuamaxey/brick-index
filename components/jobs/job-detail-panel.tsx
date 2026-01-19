@@ -14,8 +14,9 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { Label } from '@/components/ui/label';
-import { Copy, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { Copy, ChevronDown, ChevronUp, X, Search } from 'lucide-react';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 interface Job {
   id: string;
@@ -40,6 +41,7 @@ interface JobDetailPanelProps {
 
 export function JobDetailPanel({ job, onCancelJob }: JobDetailPanelProps) {
   const [isMetadataOpen, setIsMetadataOpen] = useState(false);
+  const router = useRouter();
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'N/A';
@@ -272,9 +274,21 @@ export function JobDetailPanel({ job, onCancelJob }: JobDetailPanelProps) {
         )}
 
         {/* Actions */}
-        {job.status === 'running' && onCancelJob && (
-          <Card>
-            <CardContent className="pt-6">
+        <Card>
+          <CardContent className="pt-6 space-y-2">
+            {job.type === 'reconcile' && job.status === 'completed' && (
+              <Button
+                variant="default"
+                onClick={() => {
+                  router.push(`/backend/resources/reconcile/${job.id}`);
+                }}
+                className="w-full"
+              >
+                <Search className="h-4 w-4 mr-2" />
+                Analyze Results
+              </Button>
+            )}
+            {job.status === 'running' && onCancelJob && (
               <Button
                 variant="destructive"
                 onClick={() => {
@@ -287,9 +301,9 @@ export function JobDetailPanel({ job, onCancelJob }: JobDetailPanelProps) {
                 <X className="h-4 w-4 mr-2" />
                 Cancel Job
               </Button>
-            </CardContent>
-          </Card>
-        )}
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

@@ -76,8 +76,8 @@ export class ReconcileService {
       .join(' ');
 
     console.log(`[ReconcileService] Extracting LEGO set IDs from text (length: ${text.length})...`);
-    // Extract LEGO set IDs from text
-    const extractedSetIds = this.textExtractor.extractLegoSetIds(text);
+    // Extract LEGO set IDs from text using the reconciliation version
+    const extractedSetIds = this.textExtractor.extractLegoSetIds(text, reconciliationVersion);
     const extractedCount = extractedSetIds.length;
     console.log(`[ReconcileService] Extracted ${extractedCount} potential LEGO set IDs:`, extractedSetIds);
 
