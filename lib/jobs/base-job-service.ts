@@ -16,6 +16,7 @@ const JOB_TIMEOUTS: Record<string, number> = {
   'ebay_refresh_listings': 30 * 60 * 1000, // 30 minutes
   'ebay_enrich_listings': 60 * 60 * 1000,  // 60 minutes
   'analyze_listings': 15 * 60 * 1000,      // 15 minutes
+  'reconcile': 15 * 60 * 1000,              // 15 minutes
   'lego_catalog_refresh': 60 * 60 * 1000,  // 60 minutes (for large CSV processing)
 };
 
