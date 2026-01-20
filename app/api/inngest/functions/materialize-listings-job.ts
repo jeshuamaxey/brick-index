@@ -249,8 +249,10 @@ export const materializeListingsJob = inngest.createFunction(
                 throw new Error(`Critical database error while inserting listings: ${errorMessage} (code: ${errorCode})`);
               }
               
-              // Non-critical error - continue
-              return 0;
+              // Non-critical error - continue with 0 new listings
+              newCount = 0;
+            } else {
+              newCount = newListings.length;
             }
           }
 
@@ -278,8 +280,10 @@ export const materializeListingsJob = inngest.createFunction(
                 throw new Error(`Critical database error while updating listings: ${errorMessage} (code: ${errorCode})`);
               }
               
-              // Non-critical error - continue
-              return 0;
+              // Non-critical error - continue with 0 updated listings
+              updatedCount = 0;
+            } else {
+              updatedCount = existingIds.size;
             }
           }
 
