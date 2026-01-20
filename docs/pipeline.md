@@ -212,8 +212,9 @@ raw_listings (unenriched) → eBay Browse API getItem → raw_listing_details �
 
 **Key Features**:
 - **Batch processing**: Processes listings in batches of 50 per Inngest step
-- **Deduplication**: Prevents duplicate listings while tracking when listings are seen again
+- **Deduplication**: Prevents duplicate listings while tracking when listings are seen again. Deduplication checks the database for existing listings, ensuring cross-batch duplicates are correctly identified.
 - **Job association**: Links materialized listings to the materialize job ID
+- **Scalability**: Each batch processes transform, deduplication, and insert/update in a single step, returning only counts to keep step outputs small. This allows processing arbitrarily large datasets without exceeding Inngest's step output size limits.
 
 **Data Flow**:
 ```
