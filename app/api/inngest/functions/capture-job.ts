@@ -18,16 +18,29 @@ export const captureJob = inngest.createFunction(
     let jobId: string | null = null;
 
     try {
-      const { marketplace, keywords, ebayParams } = event.data;
+      const { marketplace, keywords, ebayParams, datasetId, datasetName, userId } = event.data;
 
       // Step 1: Create job record
       const job = await step.run('create-job', async () => {
         const jobService = new BaseJobService(supabaseServer);
         const jobType: JobType = `${marketplace}_refresh_listings` as JobType;
-        return await jobService.createJob(jobType, marketplace, {
+        const metadata: Record<string, unknown> = {
           keywords,
           adapterParams: ebayParams || null,
-        });
+        };
+        
+        // Add dataset information to metadata if provided
+        if (datasetId) {
+          metadata.dataset_id = datasetId;
+        }
+        if (datasetName) {
+          metadata.dataset_name = datasetName;
+        }
+        if (userId) {
+          metadata.user_id = userId;
+        }
+        
+        return await jobService.createJob(jobType, marketplace, metadata);
       });
 
       jobId = job.id;
@@ -182,7 +195,23 @@ export const captureJob = inngest.createFunction(
 
       const listingsFound = totalItems;
 
-      // Step 5: Complete capture job
+      // Step 5: Associate raw_listings with dataset if datasetId is provided
+      if (datasetId && rawListingIds.length > 0) {
+        await step.run('associate-raw-listings-with-dataset', async () => {
+          const { DatasetService } = await import('@/lib/datasets/dataset-service');
+          // Use service role client - dataset was already validated to belong to user when capture was triggered
+          const datasetService = new DatasetService(supabaseServer);
+          
+          try {
+            await datasetService.addRawListingsToDataset(datasetId, rawListingIds);
+          } catch (error) {
+            // Log but don't fail the job if dataset association fails
+            console.error('Error associating raw_listings with dataset:', error);
+          }
+        });
+      }
+
+      // Step 6: Complete capture job
       await step.run('complete-capture-job', async () => {
         const jobService = new BaseJobService(supabaseServer);
         await jobService.completeJob(

@@ -1,8 +1,12 @@
 // API route to trigger a capture job via Inngest
 
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
 import { inngest } from '@/lib/inngest/client';
+import { DatasetService } from '@/lib/datasets/dataset-service';
 import type { EbaySearchParams } from '@/lib/capture/marketplace-adapters/ebay-adapter';
+import type { Database } from '@/lib/supabase/supabase.types';
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,10 +15,12 @@ export async function POST(request: NextRequest) {
       marketplace = 'ebay',
       keywords,
       ebayParams,
+      datasetName,
     }: {
       marketplace?: string;
       keywords?: string[];
       ebayParams?: EbaySearchParams;
+      datasetName?: string;
     } = body;
 
     // Validate keywords (required)
@@ -45,6 +51,59 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Handle dataset creation if datasetName is provided
+    let datasetId: string | undefined;
+    let userId: string | undefined;
+    
+    if (datasetName) {
+      // Get current user from session
+      const cookieStore = await cookies();
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+      if (!supabaseUrl || !supabaseAnonKey) {
+        return NextResponse.json(
+          { error: 'Supabase configuration missing' },
+          { status: 500 }
+        );
+      }
+
+      // Create a server client that can properly read cookies
+      const supabase = createServerClient<Database>(
+        supabaseUrl,
+        supabaseAnonKey,
+        {
+          cookies: {
+            getAll() {
+              return cookieStore.getAll();
+            },
+            setAll() {
+              // Not needed for reading auth state
+            },
+          },
+        }
+      );
+
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        return NextResponse.json(
+          { error: 'Authentication required for dataset creation' },
+          { status: 401 }
+        );
+      }
+
+      userId = user.id;
+
+      // Create or get dataset
+      const datasetService = new DatasetService(supabase);
+      const dataset = await datasetService.getOrCreateDataset(
+        user.id,
+        datasetName.trim()
+      );
+      datasetId = dataset.id;
+    }
+
     // Send Inngest event to trigger capture job
     
     await inngest.send({
@@ -53,6 +112,9 @@ export async function POST(request: NextRequest) {
         marketplace,
         keywords,
         ebayParams,
+        datasetName: datasetName?.trim(),
+        datasetId,
+        userId,
       },
     });
 
