@@ -3,7 +3,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/supabase.types';
 import { TextExtractor } from './text-extractor';
-import { LegoSetValidator } from './lego-set-validator';
+import { LegoSetValidator, type ValidatedSetInfo } from './lego-set-validator';
 import { LegoSetJoinsService } from './lego-set-joins-service';
 
 export interface ProcessingResult {
@@ -14,7 +14,7 @@ export interface ProcessingResult {
 
 export class ReconcileService {
   // Current reconciliation algorithm version (semantic versioning: MAJOR.MINOR.PATCH)
-  public static readonly RECONCILIATION_VERSION = '1.0.0';
+  public static readonly RECONCILIATION_VERSION = '1.2.0';
 
   private textExtractor: TextExtractor;
   private validator: LegoSetValidator;
@@ -46,10 +46,7 @@ export class ReconcileService {
     validatedIds: Array<{ extractedId: string; listingId: string }>; // Extracted set IDs that were validated
     notValidatedIds: Array<{ extractedId: string; listingId: string }>; // Extracted set IDs that were not validated
   }> {
-    console.log(`[ReconcileService] Processing listing ${listingId} with version ${reconciliationVersion}, cleanupMode: ${cleanupMode}`);
-    
     // Fetch the listing
-    console.log(`[ReconcileService] Fetching listing ${listingId} from database...`);
     const { data: listing, error: listingError } = await this.supabase
       .schema('pipeline')
       .from('listings')
@@ -64,26 +61,17 @@ export class ReconcileService {
       );
     }
 
-    console.log(`[ReconcileService] Listing ${listingId} fetched:`, {
-      title: listing.sanitised_title?.substring(0, 50) || 'N/A',
-      hasDescription: !!listing.sanitised_description,
-      descriptionLength: listing.sanitised_description?.length || 0,
-    });
-
     // Combine sanitised title and description for extraction
     // Only use sanitised fields - do not use regular title/description
     const text = [listing.sanitised_title, listing.sanitised_description]
       .filter(Boolean)
       .join(' ');
 
-    console.log(`[ReconcileService] Extracting LEGO set IDs from text (length: ${text.length})...`);
     // Extract LEGO set IDs from text using the reconciliation version
     const extractedSetIds = this.textExtractor.extractLegoSetIds(text, reconciliationVersion);
     const extractedCount = extractedSetIds.length;
-    console.log(`[ReconcileService] Extracted ${extractedCount} potential LEGO set IDs:`, extractedSetIds);
 
     // Mark listing as reconciled (even if no LEGO sets found)
-    console.log(`[ReconcileService] Marking listing ${listingId} as reconciled...`);
     const now = new Date().toISOString();
     const { error: updateError } = await this.supabase
       .schema('pipeline')
@@ -102,10 +90,7 @@ export class ReconcileService {
       );
     }
 
-    console.log(`[ReconcileService] Listing ${listingId} marked as reconciled`);
-
     if (extractedCount === 0) {
-      console.log(`[ReconcileService] No LEGO set IDs found for listing ${listingId}, returning early`);
       return {
         extracted: 0,
         validated: 0,
@@ -118,49 +103,47 @@ export class ReconcileService {
     }
 
     // Validate extracted IDs against catalog
-    console.log(`[ReconcileService] Validating ${extractedCount} extracted set IDs against catalog...`);
     const validatedMap = await this.validator.validateSetIds(extractedSetIds);
 
     // Separate validated and not validated IDs with listing ID
     const validatedIds: Array<{ extractedId: string; listingId: string }> = [];
     const notValidatedIds: Array<{ extractedId: string; listingId: string }> = [];
     
-    for (const [setNum, legoSetId] of validatedMap.entries()) {
-      if (legoSetId !== null) {
-        validatedIds.push({ extractedId: setNum, listingId });
+    for (const [extractedId, validatedInfo] of validatedMap.entries()) {
+      if (validatedInfo.legoSetId !== null) {
+        validatedIds.push({ extractedId, listingId });
       } else {
-        notValidatedIds.push({ extractedId: setNum, listingId });
+        notValidatedIds.push({ extractedId, listingId });
       }
     }
 
     // Count validated IDs (non-null values)
     const validatedCount = validatedIds.length;
-    
-    console.log(`[ReconcileService] Validation complete: ${validatedCount} of ${extractedCount} IDs are valid`);
 
     // Create join records for validated sets
-    // Convert Map<string, string | null> to Map<string, string> for createJoins
-    const validatedSetIdsMap = new Map<string, string>();
-    for (const [setNum, legoSetId] of validatedMap.entries()) {
-      if (legoSetId !== null) {
-        validatedSetIdsMap.set(setNum, legoSetId);
+    // Convert Map<string, ValidatedSetInfo> to Map<string, { legoSetId: string, setNum: string }> for createJoins
+    const validatedSetIdsMap = new Map<string, { legoSetId: string; setNum: string }>();
+    for (const [extractedId, validatedInfo] of validatedMap.entries()) {
+      if (validatedInfo.legoSetId !== null && validatedInfo.setNum !== null) {
+        validatedSetIdsMap.set(extractedId, {
+          legoSetId: validatedInfo.legoSetId,
+          setNum: validatedInfo.setNum,
+        });
       }
     }
 
-    console.log(`[ReconcileService] Creating join records for ${validatedSetIdsMap.size} validated LEGO sets...`);
-    await this.joinsService.createJoins(
-      listingId,
-      validatedSetIdsMap,
-      reconciliationVersion,
-      'mentioned',
-      cleanupMode
-    );
-
-    console.log(`[ReconcileService] Listing ${listingId} processing complete:`, {
-      extracted: extractedCount,
-      validated: validatedCount,
-      joinsCreated: validatedCount,
-    });
+    try {
+      await this.joinsService.createJoins(
+        listingId,
+        validatedSetIdsMap,
+        reconciliationVersion,
+        'mentioned',
+        cleanupMode
+      );
+    } catch (error) {
+      console.error(`[ReconcileService] Error creating join records:`, error);
+      throw error;
+    }
 
     return {
       extracted: extractedCount,

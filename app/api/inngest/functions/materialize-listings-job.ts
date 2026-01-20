@@ -24,6 +24,43 @@ interface MaterializeJobEvent {
 
 import { INNGEST_FUNCTION_IDS } from './registry';
 
+/**
+ * Check if an error is critical and should cause the entire job to fail
+ * Critical errors include database schema issues, missing tables/columns, foreign key violations, etc.
+ */
+function isCriticalError(errorMessage: string, errorCode?: string): boolean {
+  // PostgreSQL error codes that indicate critical issues
+  const criticalErrorCodes = [
+    '23503', // Foreign key violation
+    '23505', // Unique constraint violation
+    '42P01', // Undefined table
+    '42703', // Undefined column
+    '42P16', // Invalid table definition
+  ];
+  
+  if (errorCode && criticalErrorCodes.includes(errorCode)) {
+    return true;
+  }
+  
+  const criticalErrorPatterns = [
+    /Could not find.*column.*in the schema cache/i,
+    /relation.*does not exist/i,
+    /column.*does not exist/i,
+    /table.*does not exist/i,
+    /schema.*does not exist/i,
+    /violates foreign key constraint/i,
+    /violates unique constraint/i,
+    /permission denied/i,
+    /syntax error/i,
+    /invalid.*schema/i,
+    /database.*error/i,
+    /connection.*refused/i,
+    /timeout/i,
+  ];
+  
+  return criticalErrorPatterns.some(pattern => pattern.test(errorMessage));
+}
+
 export const materializeListingsJob = inngest.createFunction(
   { id: INNGEST_FUNCTION_IDS.MATERIALIZE_LISTINGS_JOB },
   { event: 'job/materialize.triggered' },
@@ -113,12 +150,12 @@ export const materializeListingsJob = inngest.createFunction(
             // Continue without enrichment data rather than failing
           }
 
-          // 3. Create a map of raw_listing_id -> raw_listing_details for quick lookup
-          const detailsMap = new Map<string, { id: string; api_response: Json }>();
+          // Create a map of raw_listing_id -> raw_listing_details for quick lookup
+          const detailsMap = new Map<string, { raw_listing_id: string; api_response: Json }>();
           if (rawListingDetails) {
             for (const detail of rawListingDetails) {
               detailsMap.set(detail.raw_listing_id, {
-                id: detail.id,
+                raw_listing_id: detail.raw_listing_id,
                 api_response: detail.api_response,
               });
             }
@@ -165,8 +202,10 @@ export const materializeListingsJob = inngest.createFunction(
                 // Merge enrichment fields into listing
                 Object.assign(listing, enrichmentFields);
 
-                // Set enriched_raw_listing_id to point to raw_listing_details.id
-                listing.enriched_raw_listing_id = enrichmentDetail.id;
+                // Set enriched_raw_listing_id to point to raw_listings.id
+                // The foreign key constraint expects a reference to raw_listings(id), not raw_listing_details(id)
+                // Since rawListing.id is the raw_listings.id, we use that
+                listing.enriched_raw_listing_id = rawListing.id;
               }
 
               transformedListings.push(listing);
@@ -200,7 +239,18 @@ export const materializeListingsJob = inngest.createFunction(
               .insert(listingsToInsert);
 
             if (insertError) {
-              console.error('Error inserting new listings:', insertError);
+              const errorMessage = insertError.message || JSON.stringify(insertError);
+              const errorCode = insertError.code;
+              
+              // Check if this is a critical error that should fail the entire job
+              const isCritical = isCriticalError(errorMessage, errorCode);
+              
+              if (isCritical) {
+                throw new Error(`Critical database error while inserting listings: ${errorMessage} (code: ${errorCode})`);
+              }
+              
+              // Non-critical error - continue with 0 new listings
+              newCount = 0;
             } else {
               newCount = newListings.length;
             }
@@ -220,9 +270,20 @@ export const materializeListingsJob = inngest.createFunction(
               .in('id', existingIdsArray);
 
             if (updateError) {
-              console.error('Error updating existing listings:', updateError);
+              const errorMessage = updateError.message || JSON.stringify(updateError);
+              const errorCode = updateError.code;
+              
+              // Check if this is a critical error that should fail the entire job
+              const isCritical = isCriticalError(errorMessage, errorCode);
+              
+              if (isCritical) {
+                throw new Error(`Critical database error while updating listings: ${errorMessage} (code: ${errorCode})`);
+              }
+              
+              // Non-critical error - continue with 0 updated listings
+              updatedCount = 0;
             } else {
-              updatedCount = existingIdsArray.length;
+              updatedCount = existingIds.size;
             }
           }
 
@@ -266,12 +327,23 @@ export const materializeListingsJob = inngest.createFunction(
         listings_updated: listingsUpdated,
       };
     } catch (error) {
+      // Handle critical errors that should fail the entire job
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const isCritical = isCriticalError(errorMessage);
+      
+      console.error('[Materialize Job] Error in materialize job:', errorMessage);
+      if (error instanceof Error && error.stack) {
+        console.error('[Materialize Job] Stack trace:', error.stack);
+      }
+      
       // Mark job as failed if it was created
       if (jobId) {
         await step.run('fail-job', async () => {
           const jobService = new BaseJobService(supabaseServer);
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          await jobService.failJob(jobId!, errorMessage);
+          const failureMessage = isCritical
+            ? `Critical error: ${errorMessage}`
+            : `Job error: ${errorMessage}`;
+          await jobService.failJob(jobId!, failureMessage);
         });
       }
 

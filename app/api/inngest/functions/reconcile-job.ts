@@ -25,13 +25,35 @@ interface ReconcileJobEvent {
 
 import { INNGEST_FUNCTION_IDS } from './registry';
 
+/**
+ * Check if an error is critical and should cause the entire job to fail
+ * Critical errors include database schema issues, missing tables/columns, etc.
+ */
+function isCriticalError(errorMessage: string): boolean {
+  const criticalErrorPatterns = [
+    /Could not find.*column.*in the schema cache/i,
+    /relation.*does not exist/i,
+    /column.*does not exist/i,
+    /table.*does not exist/i,
+    /schema.*does not exist/i,
+    /permission denied/i,
+    /syntax error/i,
+    /invalid.*schema/i,
+    /database.*error/i,
+    /connection.*refused/i,
+    /timeout/i,
+  ];
+  
+  return criticalErrorPatterns.some(pattern => pattern.test(errorMessage));
+}
+
 export const reconcileJob = inngest.createFunction(
   { id: INNGEST_FUNCTION_IDS.RECONCILE_JOB },
   { event: 'job/reconcile.triggered' },
   async ({ event, step }) => {
-    console.log('[Reconcile Job] Starting reconcile job...');
-    console.log('[Reconcile Job] Event data:', JSON.stringify(event.data, null, 2));
+    let jobId: string | undefined;
     
+    try {
     const {
       listingIds,
       limit,
@@ -43,18 +65,8 @@ export const reconcileJob = inngest.createFunction(
     // Use provided version or default to current version
     const versionToUse =
       reconciliationVersion || ReconcileService.RECONCILIATION_VERSION;
-    
-    console.log('[Reconcile Job] Configuration:', {
-      reconciliationVersion: versionToUse,
-      cleanupMode,
-      rerun,
-      hasListingIds: !!listingIds,
-      listingIdsCount: listingIds?.length || 0,
-      limit: limit || 'no limit',
-    });
 
     // Step 1: Create job record
-    console.log('[Reconcile Job] Step 1: Creating job record...');
     const job = await step.run('create-job', async () => {
       const jobService = new BaseJobService(supabaseServer);
       const createdJob = await jobService.createJob(
@@ -68,25 +80,19 @@ export const reconcileJob = inngest.createFunction(
           rerun: rerun,
         }
       );
-      console.log('[Reconcile Job] Job created:', { jobId: createdJob.id, status: createdJob.status });
       return createdJob;
     });
 
     const jobId = job.id;
-    console.log('[Reconcile Job] Job ID:', jobId);
 
     // Step 2: Initialize reconcile service
-    console.log('[Reconcile Job] Step 2: Initializing reconcile service...');
     const reconcileService = new ReconcileService(supabaseServer);
-    console.log('[Reconcile Job] Reconcile service initialized');
 
     // Step 3: Get listings to reconcile
-    console.log('[Reconcile Job] Step 3: Getting listings to reconcile...');
     let listingIdsToReconcile: string[];
 
     if (listingIds && listingIds.length > 0) {
       // Use provided listing IDs
-      console.log('[Reconcile Job] Using provided listing IDs:', listingIds.length);
       listingIdsToReconcile = listingIds;
 
       await step.run('update-progress-found', async () => {
@@ -97,10 +103,8 @@ export const reconcileJob = inngest.createFunction(
           { listings_found: listingIds.length }
         );
       });
-      console.log('[Reconcile Job] Using', listingIds.length, 'provided listing IDs');
     } else {
       // Find listings that have not yet been reconciled
-      console.log('[Reconcile Job] No listing IDs provided, finding unreconciled listings...');
       await step.run('update-progress-finding', async () => {
         const jobService = new BaseJobService(supabaseServer);
         await jobService.updateJobProgress(
@@ -110,8 +114,6 @@ export const reconcileJob = inngest.createFunction(
       });
 
       listingIdsToReconcile = await step.run('find-listings', async () => {
-        console.log('[Reconcile Job] Querying listings table directly for listings to reconcile...');
-        
         // Query listings table directly for listings to reconcile
         // Listings that either:
         // 1. Have NOT been reconciled (reconciled_at IS NULL), OR
@@ -134,13 +136,16 @@ export const reconcileJob = inngest.createFunction(
 
         if (listingsError) {
           console.error('[Reconcile Job] Error fetching listings:', listingsError);
-          throw new Error(
-            `Failed to fetch listings: ${listingsError.message}`
-          );
+          const errorMessage = `Failed to fetch listings: ${listingsError.message}`;
+          // Check if this is a critical error
+          if (isCriticalError(listingsError.message)) {
+            console.error('[Reconcile Job] CRITICAL ERROR detected while fetching listings - will fail job');
+            throw new Error(errorMessage);
+          }
+          throw new Error(errorMessage);
         }
 
         if (!listings || listings.length === 0) {
-          console.log('[Reconcile Job] No active listings found, returning empty array');
           return [];
         }
 
@@ -158,27 +163,17 @@ export const reconcileJob = inngest.createFunction(
           }
         );
 
-        console.log('[Reconcile Job] Filter results:', {
-          totalListings: listings.length,
-          needsReconciliation: listingsToReconcile.length,
-          alreadyReconciled: listings.length - listingsToReconcile.length,
-          rerun: rerun,
-        });
-
         let listingIds = listingsToReconcile.map((l) => l.id);
 
         // Apply limit if provided
         if (limit) {
           listingIds = listingIds.slice(0, limit);
-          console.log('[Reconcile Job] Applied limit:', listingIds.length, 'of', listingsToReconcile.length);
         }
 
-        console.log('[Reconcile Job] Returning', listingIds.length, 'listing IDs to reconcile');
         return listingIds;
       });
 
       if (listingIdsToReconcile.length === 0) {
-        console.log('[Reconcile Job] No listings found to reconcile, completing job with no work');
         await step.run('complete-job-no-work', async () => {
           const jobService = new BaseJobService(supabaseServer);
           await jobService.completeJob(
@@ -192,7 +187,6 @@ export const reconcileJob = inngest.createFunction(
             'No listings found to reconcile'
           );
         });
-        console.log('[Reconcile Job] Job completed with no work');
         return {
           jobId,
           total: 0,
@@ -213,7 +207,6 @@ export const reconcileJob = inngest.createFunction(
     }
 
     // Step 4: Process listings in batches
-    console.log('[Reconcile Job] Step 4: Processing', listingIdsToReconcile.length, 'listings in batches');
     const result = {
       succeeded: 0,
       failed: 0,
@@ -232,21 +225,19 @@ export const reconcileJob = inngest.createFunction(
       allExtractedIds: new Set<string>(),
       allValidatedIds: Array<{ extractedId: string; listingId: string }>(),
       allNotValidatedIds: Array<{ extractedId: string; listingId: string }>(),
+      // Track all processed listing IDs (including ones with zero extracted IDs)
+      processedListingIds: Array<string>(),
     };
 
     const batches = Math.ceil(listingIdsToReconcile.length / BATCH_SIZE);
-    console.log('[Reconcile Job] Will process', batches, 'batches of up to', BATCH_SIZE, 'listings each');
 
     for (let i = 0; i < batches; i++) {
       const start = i * BATCH_SIZE;
       const end = Math.min(start + BATCH_SIZE, listingIdsToReconcile.length);
       const batch = listingIdsToReconcile.slice(start, end);
 
-      console.log(`[Reconcile Job] Processing batch ${i + 1}/${batches}: listings ${start + 1}-${end} (${batch.length} listings)`);
-
       // Process batch
       const batchResult = await step.run(`process-batch-${i}`, async () => {
-        console.log(`[Reconcile Job] Batch ${i + 1}: Starting to process ${batch.length} listings`);
         const batchStats = {
           succeeded: 0,
           failed: 0,
@@ -265,22 +256,17 @@ export const reconcileJob = inngest.createFunction(
           extractedIds: new Set<string>(),
           validatedIds: Array<{ extractedId: string; listingId: string }>(),
           notValidatedIds: Array<{ extractedId: string; listingId: string }>(),
+          // Track all processed listing IDs (including ones with zero extracted IDs)
+          processedListingIds: Array<string>(),
         };
 
         for (const listingId of batch) {
           try {
-            console.log(`[Reconcile Job] Batch ${i + 1}: Processing listing ${listingId}`);
             const stats = await reconcileService.processListing(
               listingId,
               versionToUse,
               cleanupMode
             );
-            console.log(`[Reconcile Job] Batch ${i + 1}: Listing ${listingId} processed successfully:`, {
-              extracted: stats.extracted,
-              validated: stats.validated,
-              joinsCreated: stats.joinsCreated,
-              extractedCount: stats.extractedCount,
-            });
             batchStats.succeeded++;
             batchStats.extracted += stats.extracted;
             batchStats.validated += stats.validated;
@@ -290,6 +276,9 @@ export const reconcileJob = inngest.createFunction(
             stats.extractedIds.forEach(id => batchStats.extractedIds.add(id));
             batchStats.validatedIds.push(...stats.validatedIds);
             batchStats.notValidatedIds.push(...stats.notValidatedIds);
+            
+            // Track processed listing ID (even if zero extracted IDs)
+            batchStats.processedListingIds.push(listingId);
             
             // Track distribution by number of IDs found
             const extractedCount = stats.extractedCount;
@@ -307,9 +296,24 @@ export const reconcileJob = inngest.createFunction(
               batchStats.listingsWithFiveOrMoreIds++;
             }
           } catch (error) {
-            batchStats.failed++;
             const errorMessage =
               error instanceof Error ? error.message : 'Unknown error';
+            
+            // Check if this is a critical error that should fail the entire job
+            const isCritical = isCriticalError(errorMessage);
+            
+            if (isCritical) {
+              console.error(`[Reconcile Job] Batch ${i + 1}: CRITICAL ERROR detected - will fail entire job`);
+              console.error(`[Reconcile Job] Critical error message:`, errorMessage);
+              if (error instanceof Error && error.stack) {
+                console.error(`[Reconcile Job] Stack trace:`, error.stack);
+              }
+              // Re-throw critical errors to fail the entire job
+              throw error;
+            }
+            
+            // Non-critical error - mark this listing as failed but continue
+            batchStats.failed++;
             console.error(`[Reconcile Job] Batch ${i + 1}: Error reconciling listing ${listingId}:`, errorMessage);
             if (error instanceof Error && error.stack) {
               console.error(`[Reconcile Job] Batch ${i + 1}: Stack trace:`, error.stack);
@@ -321,13 +325,6 @@ export const reconcileJob = inngest.createFunction(
           }
         }
 
-        console.log(`[Reconcile Job] Batch ${i + 1}: Completed -`, {
-          succeeded: batchStats.succeeded,
-          failed: batchStats.failed,
-          extracted: batchStats.extracted,
-          validated: batchStats.validated,
-          joinsCreated: batchStats.joinsCreated,
-        });
         // Convert Sets to Arrays for serialization (Inngest steps can't serialize Sets)
         return {
           ...batchStats,
@@ -349,6 +346,8 @@ export const reconcileJob = inngest.createFunction(
       result.listingsWithThreeIds += batchResult.listingsWithThreeIds;
       result.listingsWithFourIds += batchResult.listingsWithFourIds;
       result.listingsWithFiveOrMoreIds += batchResult.listingsWithFiveOrMoreIds;
+      // Aggregate processed listing IDs
+      result.processedListingIds.push(...(batchResult.processedListingIds || []));
       // Aggregate extracted IDs
       if (Array.isArray(batchResult.extractedIds)) {
         batchResult.extractedIds.forEach((id: string) => result.allExtractedIds.add(id));
@@ -361,13 +360,6 @@ export const reconcileJob = inngest.createFunction(
       }
 
       // Update progress after each batch
-      console.log(`[Reconcile Job] Batch ${i + 1}: Updating progress -`, {
-        totalProcessed: result.succeeded,
-        totalFailed: result.failed,
-        totalExtracted: result.totalExtracted,
-        totalValidated: result.totalValidated,
-        totalJoinsCreated: result.totalJoinsCreated,
-      });
       await step.run(`update-progress-batch-${i}`, async () => {
         const jobService = new BaseJobService(supabaseServer);
         await jobService.updateJobProgress(
@@ -386,23 +378,6 @@ export const reconcileJob = inngest.createFunction(
     }
 
     // Step 5: Complete or fail job
-    console.log('[Reconcile Job] Step 5: Completing job with final results:', {
-      total: listingIdsToReconcile.length,
-      succeeded: result.succeeded,
-      failed: result.failed,
-      totalExtracted: result.totalExtracted,
-      totalValidated: result.totalValidated,
-      totalJoinsCreated: result.totalJoinsCreated,
-      distribution: {
-        zero: result.listingsWithZeroIds,
-        one: result.listingsWithOneId,
-        two: result.listingsWithTwoIds,
-        three: result.listingsWithThreeIds,
-        four: result.listingsWithFourIds,
-        fiveOrMore: result.listingsWithFiveOrMoreIds,
-      },
-    });
-    
     const finalStatus =
       result.failed === listingIdsToReconcile.length ? 'failed' : 'completed';
     const finalMessage =
@@ -412,17 +387,14 @@ export const reconcileJob = inngest.createFunction(
         ? `Completed: ${result.succeeded} reconciled successfully, ${result.failed} failed`
         : `Completed: ${result.succeeded} listings reconciled successfully`;
 
-    console.log('[Reconcile Job] Final status:', finalStatus);
-    console.log('[Reconcile Job] Final message:', finalMessage);
-
     await step.run('complete-job', async () => {
-      console.log('[Reconcile Job] Updating job record in database...');
       const jobService = new BaseJobService(supabaseServer);
       
       // Prepare metadata with distribution statistics and extracted IDs
       const extractedIdsArray = Array.from(result.allExtractedIds).sort();
       const metadata = {
         total_listings_input: listingIdsToReconcile.length,
+        processed_listing_ids: result.processedListingIds.sort(), // All processed listing IDs (including zero extracted IDs)
         distribution: {
           listings_with_zero_ids: result.listingsWithZeroIds,
           listings_with_one_id: result.listingsWithOneId,
@@ -454,7 +426,6 @@ export const reconcileJob = inngest.createFunction(
       };
       
       if (finalStatus === 'failed') {
-        console.log('[Reconcile Job] Marking job as failed');
         await jobService.failJob(
           jobId,
           result.failed > 0 && result.succeeded === 0
@@ -463,7 +434,6 @@ export const reconcileJob = inngest.createFunction(
         );
         
         // Store metadata even for failed jobs
-        console.log('[Reconcile Job] Storing metadata for failed job');
         await supabaseServer
           .schema('pipeline')
           .from('jobs')
@@ -472,7 +442,6 @@ export const reconcileJob = inngest.createFunction(
           })
           .eq('id', jobId);
       } else {
-        console.log('[Reconcile Job] Marking job as completed');
         await jobService.completeJob(
           jobId,
           {
@@ -487,7 +456,6 @@ export const reconcileJob = inngest.createFunction(
         );
         
         // Store detailed metadata about ID distribution
-        console.log('[Reconcile Job] Storing metadata for completed job');
         await supabaseServer
           .schema('pipeline')
           .from('jobs')
@@ -496,22 +464,38 @@ export const reconcileJob = inngest.createFunction(
           })
           .eq('id', jobId);
       }
-      console.log('[Reconcile Job] Job record updated successfully');
     });
 
-    console.log('[Reconcile Job] Job finished. Returning result:', {
-      jobId,
-      total: listingIdsToReconcile.length,
-      succeeded: result.succeeded,
-      failed: result.failed,
-    });
-
-    return {
-      jobId,
-      total: listingIdsToReconcile.length,
-      succeeded: result.succeeded,
-      failed: result.failed,
-      errors: result.errors,
-    };
+      return {
+        jobId,
+        total: listingIdsToReconcile.length,
+        succeeded: result.succeeded,
+        failed: result.failed,
+        errors: result.errors,
+      };
+    } catch (error) {
+      // Handle critical errors that should fail the entire job
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const isCritical = isCriticalError(errorMessage);
+      
+      console.error('[Reconcile Job] Error in reconcile job:', errorMessage);
+      if (error instanceof Error && error.stack) {
+        console.error('[Reconcile Job] Stack trace:', error.stack);
+      }
+      
+      // Mark job as failed if it was created
+      if (jobId) {
+        await step.run('fail-job-on-error', async () => {
+          const jobService = new BaseJobService(supabaseServer);
+          const failureMessage = isCritical
+            ? `Critical error: ${errorMessage}`
+            : `Job error: ${errorMessage}`;
+          await jobService.failJob(jobId, failureMessage);
+        });
+      }
+      
+      // Re-throw to let Inngest know the function failed
+      throw error;
+    }
   }
 );

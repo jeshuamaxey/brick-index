@@ -2,12 +2,15 @@
 
 /**
  * Regex pattern for extracting LEGO set IDs from text
- * Pattern: \b\d{3,7}(-\d{1,2})?\b
+ * Pattern: (?<!\d\.)\b\d{3,7}(-\d{1,2})?\b(?!%)
+ * - (?<!\d\.) - Negative lookbehind to exclude matches preceded by digit-period (e.g., "9.344" won't match "344")
  * - \b - Word boundaries to avoid matching partial numbers
  * - \d{3,7} - Main set number (3-7 digits)
  * - (-\d{1,2})? - Optional version suffix (dash + 1-2 digits)
+ * - \b - Word boundary
+ * - (?!%) - Negative lookahead to exclude matches followed by "%" (e.g., "100%")
  */
-export const DEFAULT_LEGO_SET_ID_PATTERN = /\b\d{3,7}(-\d{1,2})?\b/g;
+export const DEFAULT_LEGO_SET_ID_PATTERN = /(?<!\d\.)\b\d{3,7}(-\d{1,2})?\b(?!%)/g;
 
 /**
  * Mapping of reconciliation versions to their regex patterns
@@ -15,9 +18,9 @@ export const DEFAULT_LEGO_SET_ID_PATTERN = /\b\d{3,7}(-\d{1,2})?\b/g;
  * and to display the correct pattern in the UI based on the job's version
  */
 const VERSION_TO_PATTERN: Record<string, RegExp> = {
-  '1.0.0': DEFAULT_LEGO_SET_ID_PATTERN,
-  // Future versions can be added here:
-  // '1.1.0': /some-improved-pattern/g,
+  '1.0.0': /\b\d{3,7}(-\d{1,2})?\b/g, // Original pattern without % exclusion
+  '1.1.0': /\b\d{3,7}(-\d{1,2})?\b(?!%)/g, // Pattern with % exclusion
+  '1.2.0': DEFAULT_LEGO_SET_ID_PATTERN, // Pattern with % exclusion and decimal exclusion
 };
 
 export class RegexPatternService {

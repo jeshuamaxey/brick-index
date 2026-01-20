@@ -307,6 +307,7 @@ export type Database = {
           lego_set_id: string
           listing_id: string
           nature: string
+          potential_year_match: boolean
           reconciliation_version: string
           status: string
           updated_at: string | null
@@ -317,6 +318,7 @@ export type Database = {
           lego_set_id: string
           listing_id: string
           nature?: string
+          potential_year_match?: boolean
           reconciliation_version: string
           status?: string
           updated_at?: string | null
@@ -327,6 +329,7 @@ export type Database = {
           lego_set_id?: string
           listing_id?: string
           nature?: string
+          potential_year_match?: boolean
           reconciliation_version?: string
           status?: string
           updated_at?: string | null

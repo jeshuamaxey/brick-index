@@ -13,6 +13,12 @@ interface ExtractedId {
   validated: boolean;
 }
 
+interface ValidatedSet {
+  legoSetId: string;
+  setNum: string;
+  name: string;
+}
+
 interface ListingAnalysisItemProps {
   listingId: string;
   title: string;
@@ -22,6 +28,7 @@ interface ListingAnalysisItemProps {
   extractedIds: ExtractedId[];
   regexPattern: RegExp;
   onCopyListingId: (listingId: string) => void;
+  validatedSets?: ValidatedSet[];
 }
 
 /**
@@ -37,6 +44,7 @@ export function ListingAnalysisItem({
   extractedIds,
   regexPattern,
   onCopyListingId,
+  validatedSets = [],
 }: ListingAnalysisItemProps) {
   // Count occurrences of each extracted ID in the text
   // Use sanitized text if available, otherwise fall back to original
@@ -162,6 +170,31 @@ export function ListingAnalysisItem({
                   </Badge>
                 );
               })}
+            </div>
+          )}
+        </div>
+
+        {/* Validated LEGO sets */}
+        <Separator />
+        <div>
+          <Label className="text-sm font-medium mb-2 block">
+            Validated LEGO sets ({validatedSets.length})
+          </Label>
+          {validatedSets.length === 0 ? (
+            <p className="text-sm text-muted-foreground italic">
+              No validated LEGO sets for this listing
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {validatedSets.map((set) => (
+                <Badge
+                  key={set.legoSetId}
+                  variant="outline"
+                  className="text-xs"
+                >
+                  {set.setNum} — {set.name}
+                </Badge>
+              ))}
             </div>
           )}
         </div>
