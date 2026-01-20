@@ -2,12 +2,19 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Card,
   CardContent,
@@ -16,6 +23,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import type { Dataset } from '@/lib/types';
 import { useTriggerSanitize } from '@/hooks/use-sanitize';
 import { useToast } from '@/hooks/use-toast';
 import { ActionPageHeader } from '@/components/backend/action-page-header';
@@ -27,14 +35,38 @@ export default function SanitizePage() {
   const [limit, setLimit] = useState('');
   const [listingIds, setListingIds] = useState('');
   const [limitError, setLimitError] = useState('');
+  const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string | undefined>(undefined);
+  const [loadingDatasets, setLoadingDatasets] = useState(false);
 
   const triggerSanitize = useTriggerSanitize();
+
+  // Fetch datasets on mount
+  useEffect(() => {
+    const fetchDatasets = async () => {
+      setLoadingDatasets(true);
+      try {
+        const response = await fetch('/api/datasets');
+        if (response.ok) {
+          const data = await response.json();
+          setDatasets(data);
+        }
+      } catch (error) {
+        console.error('Error fetching datasets:', error);
+      } finally {
+        setLoadingDatasets(false);
+      }
+    };
+
+    fetchDatasets();
+  }, []);
 
   // Generate JSON payload for Inngest
   const inngestPayload = useMemo(() => {
     const payload: {
       listingIds?: string[];
       limit?: number;
+      datasetId?: string;
     } = {};
 
     if (listingIds.trim()) {
@@ -54,11 +86,15 @@ export default function SanitizePage() {
       }
     }
 
+    if (selectedDatasetId) {
+      payload.datasetId = selectedDatasetId;
+    }
+
     return {
       name: 'job/sanitize.triggered',
       data: payload,
     };
-  }, [limit, listingIds]);
+  }, [limit, listingIds, selectedDatasetId]);
 
   const validateForm = (): boolean => {
     let isValid = true;
@@ -83,6 +119,7 @@ export default function SanitizePage() {
     const payload: {
       listingIds?: string[];
       limit?: number;
+      datasetId?: string;
     } = {};
 
     if (listingIds.trim()) {
@@ -100,6 +137,10 @@ export default function SanitizePage() {
       if (!isNaN(limitNum) && limitNum > 0) {
         payload.limit = limitNum;
       }
+    }
+
+    if (selectedDatasetId) {
+      payload.datasetId = selectedDatasetId;
     }
 
     triggerSanitize.mutate(payload, {
@@ -143,6 +184,29 @@ export default function SanitizePage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="dataset">Dataset (optional)</Label>
+              <Select 
+                value={selectedDatasetId || undefined} 
+                onValueChange={(value) => setSelectedDatasetId(value || undefined)}
+              >
+                <SelectTrigger id="dataset" className="w-full">
+                  <SelectValue placeholder="Select a dataset (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {datasets.map((dataset) => (
+                    <SelectItem key={dataset.id} value={dataset.id}>
+                      {dataset.name}
+                      {dataset.listing_count !== undefined && ` (${dataset.listing_count} listings)`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Optional. If selected, only sanitizes listings from this dataset. Ignored if listing IDs are provided. Leave unselected to process all listings.
+              </p>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="listingIds">Listing IDs (optional)</Label>
               <Textarea

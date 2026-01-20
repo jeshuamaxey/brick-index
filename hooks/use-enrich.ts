@@ -4,6 +4,7 @@ export interface EnrichPayload {
   marketplace: string;
   limit?: number;
   delayMs?: number;
+  datasetId?: string;
 }
 
 export interface EnrichResponse {

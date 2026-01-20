@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 
 export interface ListingFilters {
   status?: string;
-  job_id?: string;
+  dataset_id?: string;
   marketplace?: string;
   enriched?: 'true' | 'false';
 }
@@ -45,8 +45,8 @@ async function fetchListings(
   if (filters.status) {
     params.append('status', filters.status);
   }
-  if (filters.job_id) {
-    params.append('job_id', filters.job_id);
+  if (filters.dataset_id) {
+    params.append('dataset_id', filters.dataset_id);
   }
   if (filters.marketplace) {
     params.append('marketplace', filters.marketplace);

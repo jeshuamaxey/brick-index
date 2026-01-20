@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 export interface AnalyzePayload {
   listingIds?: string[];
   limit?: number;
+  datasetId?: string;
 }
 
 export interface AnalyzeResponse {

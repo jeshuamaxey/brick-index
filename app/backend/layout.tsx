@@ -6,6 +6,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { BreadcrumbNav } from "./components/breadcrumb-nav"
+import { DevAuthButton } from "./components/dev-auth-button"
 
 export default function BackendLayout({
   children,
@@ -17,10 +18,13 @@ export default function BackendLayout({
       <AppSidebar />
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 border-b border-foreground/10 bg-background">
-          <div className="flex items-center gap-2 px-3">
+          <div className="flex items-center gap-2 px-3 flex-1">
             <SidebarTrigger />
             <Separator orientation="vertical" className="mr-2 h-4" />
             <BreadcrumbNav />
+          </div>
+          <div className="px-3">
+            <DevAuthButton />
           </div>
         </header>
         <div className="flex flex-col h-[calc(100vh-4rem)] overflow-y-auto">

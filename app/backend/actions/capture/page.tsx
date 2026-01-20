@@ -29,6 +29,7 @@ export default function CapturePage() {
   const { toast } = useToast();
   
   // Form state
+  const [datasetName, setDatasetName] = useState('');
   const [keywords, setKeywords] = useState('');
   const [entriesPerPage, setEntriesPerPage] = useState('200');
   const [useEntriesPerPage, setUseEntriesPerPage] = useState(true);
@@ -117,9 +118,10 @@ export default function CapturePage() {
         marketplace: 'ebay',
         keywords: keywordArray.length > 0 ? keywordArray : [],
         ...(Object.keys(ebayParams).length > 0 && { ebayParams }),
+        ...(datasetName.trim() && { datasetName: datasetName.trim() }),
       },
     };
-  }, [keywords, entriesPerPage, useEntriesPerPage, enablePagination, maxResults, listingTypeFixed, listingTypeAuction, useListingTypes, hideDuplicates, useHideDuplicates, categoryId, useCategoryId, marketplaceId, useMarketplaceId]);
+  }, [keywords, datasetName, entriesPerPage, useEntriesPerPage, enablePagination, maxResults, listingTypeFixed, listingTypeAuction, useListingTypes, hideDuplicates, useHideDuplicates, categoryId, useCategoryId, marketplaceId, useMarketplaceId]);
 
   const populateTestData = () => {
     setKeywords('stranger things Lego');
@@ -223,6 +225,7 @@ export default function CapturePage() {
         marketplace: 'ebay',
         keywords: keywordArray,
         ebayParams: Object.keys(ebayParams).length > 0 ? ebayParams : undefined,
+        datasetName: datasetName.trim() || undefined,
       },
       {
         onSuccess: () => {
@@ -261,11 +264,6 @@ export default function CapturePage() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>Capture</CardTitle>
-                <CardDescription>
-                  Searches for LEGO listings on eBay using keywords and stores them in the database. 
-                  Uses real eBay API if configured, or snapshot data in cache mode. Deduplicates listings 
-                  and updates existing ones.
-                </CardDescription>
               </div>
               <Button
                 variant="outline"
@@ -278,17 +276,23 @@ export default function CapturePage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
-            {!loadingStatus && (
-              <div className="text-sm text-muted-foreground">
-                {lastCaptureDate 
-                  ? `Last successful capture job was completed on ${lastCaptureDate}.`
-                  : 'No successful capture jobs found.'}
-              </div>
-            )}
-
             <div className="space-y-6">
               {/* Required Fields */}
               <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="datasetName">Dataset Name (optional)</Label>
+                  <Input
+                    id="datasetName"
+                    type="text"
+                    value={datasetName}
+                    onChange={(e) => setDatasetName(e.target.value)}
+                    placeholder="e.g., Harry Potter LEGO sets"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Optional. If provided, listings will be associated with this dataset. Dataset will be created automatically if it doesn't exist.
+                  </p>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="keywords">Keywords (comma-separated) *</Label>
                   <Input
