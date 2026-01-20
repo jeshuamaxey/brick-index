@@ -1,6 +1,6 @@
 'use client';
 
-import { useJobs } from '@/hooks/use-jobs';
+import { useState, useEffect } from 'react';
 import {
   Select,
   SelectContent,
@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
 import type { ListingFilters } from '@/hooks/use-listings';
+import type { Dataset } from '@/lib/types';
 
 interface ListingsFiltersProps {
   filters: ListingFilters;
@@ -21,7 +22,28 @@ export function ListingsFilters({
   filters,
   onFiltersChange,
 }: ListingsFiltersProps) {
-  const { data: jobsData, isLoading: jobsLoading } = useJobs();
+  const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [loadingDatasets, setLoadingDatasets] = useState(false);
+
+  // Fetch datasets on mount
+  useEffect(() => {
+    const fetchDatasets = async () => {
+      setLoadingDatasets(true);
+      try {
+        const response = await fetch('/api/datasets');
+        if (response.ok) {
+          const data = await response.json();
+          setDatasets(data);
+        }
+      } catch (error) {
+        console.error('Error fetching datasets:', error);
+      } finally {
+        setLoadingDatasets(false);
+      }
+    };
+
+    fetchDatasets();
+  }, []);
 
   const handleFilterChange = (key: keyof ListingFilters, value: string) => {
     onFiltersChange({
@@ -42,29 +64,28 @@ export function ListingsFilters({
     <div className="flex flex-wrap items-center gap-3 mb-4">
       <div className="flex items-center gap-2">
         <label className="text-xs text-foreground/70 whitespace-nowrap">
-          Job:
+          Dataset:
         </label>
         <Select
-          value={filters.job_id || 'all'}
-          onValueChange={(value) => handleFilterChange('job_id', value)}
+          value={filters.dataset_id || 'all'}
+          onValueChange={(value) => handleFilterChange('dataset_id', value)}
         >
-          <SelectTrigger size="sm" className="w-[200px]">
-            <SelectValue placeholder="All jobs" />
+          <SelectTrigger size="sm" className="w-[250px]">
+            <SelectValue placeholder="All datasets" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All jobs</SelectItem>
-            {jobsLoading ? (
+            <SelectItem value="all">All</SelectItem>
+            {loadingDatasets ? (
               <SelectItem value="loading" disabled>
                 Loading...
               </SelectItem>
             ) : (
-              jobsData?.jobs
-                .filter((job) => job.type.includes('refresh'))
-                .map((job) => (
-                  <SelectItem key={job.id} value={job.id}>
-                    {job.type.replace(/_/g, ' ')} - {new Date(job.started_at).toLocaleDateString()}
-                  </SelectItem>
-                ))
+              datasets.map((dataset) => (
+                <SelectItem key={dataset.id} value={dataset.id}>
+                  {dataset.name}
+                  {dataset.listing_count !== undefined && ` (${dataset.listing_count.toLocaleString()})`}
+                </SelectItem>
+              ))
             )}
           </SelectContent>
         </Select>

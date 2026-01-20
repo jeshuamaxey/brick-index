@@ -5,6 +5,7 @@ export interface CapturePayload {
   marketplace: string;
   keywords: string[];
   ebayParams?: EbaySearchParams;
+  datasetName?: string;
 }
 
 export interface CaptureResponse {

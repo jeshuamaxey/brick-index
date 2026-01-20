@@ -29,18 +29,24 @@ export const enrichJob = inngest.createFunction(
   { id: INNGEST_FUNCTION_IDS.ENRICH_JOB },
   { event: 'job/enrich.triggered' },
   async ({ event, step }) => {
-    const { marketplace, captureJobId, limit, delayMs = 200 } = event.data;
+    const { marketplace, captureJobId, limit, delayMs = 200, datasetId } = event.data;
 
     // Step 1: Create job record
     const job = await step.run('create-job', async () => {
       const jobService = new BaseJobService(supabaseServer);
       const jobType: JobType = `${marketplace}_enrich_listings` as JobType;
-      return await jobService.createJob(jobType, marketplace, {
+      const metadata: Record<string, unknown> = {
         limit: limit || null,
         delayMs,
         marketplace,
         captureJobId: captureJobId || null,
-      });
+      };
+      
+      if (datasetId) {
+        metadata.dataset_id = datasetId;
+      }
+      
+      return await jobService.createJob(jobType, marketplace, metadata);
     });
 
     const jobId = job.id;
@@ -63,6 +69,28 @@ export const enrichJob = inngest.createFunction(
       // Filter by capture job if provided
       if (captureJobId) {
         query = query.eq('job_id', captureJobId);
+      }
+
+      // Filter by dataset if provided
+      if (datasetId) {
+        // Get all raw_listing IDs in the dataset
+        const { data: datasetRawListings, error: datasetError } = await supabaseServer
+          .schema('public')
+          .from('dataset_raw_listings')
+          .select('raw_listing_id')
+          .eq('dataset_id', datasetId);
+
+        if (datasetError) {
+          throw new Error(`Failed to get dataset raw_listings: ${datasetError.message}`);
+        }
+
+        if (datasetRawListings && datasetRawListings.length > 0) {
+          const rawListingIds = datasetRawListings.map(drl => drl.raw_listing_id);
+          query = query.in('id', rawListingIds);
+        } else {
+          // No raw_listings in dataset, return empty
+          return [];
+        }
       }
 
       if (limit) {

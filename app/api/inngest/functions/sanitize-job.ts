@@ -26,18 +26,24 @@ export const sanitizeJob = inngest.createFunction(
     let jobId: string | null = null;
 
     try {
-      const { listingIds, limit } = event.data;
+      const { listingIds, limit, datasetId } = event.data;
 
       // Step 1: Create job record
       const job = await step.run('create-job', async () => {
         const jobService = new BaseJobService(supabaseServer);
+        const metadata: Record<string, unknown> = {
+          listingIds: listingIds || null,
+          limit: limit || null,
+        };
+        
+        if (datasetId) {
+          metadata.dataset_id = datasetId;
+        }
+        
         return await jobService.createJob(
           'sanitize_listings' as JobType,
           'all', // Marketplace doesn't really apply to sanitize
-          {
-            listingIds: listingIds || null,
-            limit: limit || null,
-          }
+          metadata
         );
       });
 
@@ -51,6 +57,28 @@ export const sanitizeJob = inngest.createFunction(
 
       // Step 3: Query listings to sanitize
       const listings = await step.run('query-listings', async () => {
+        // If dataset_id is provided and listingIds is not provided, get listing IDs from dataset
+        let filteredListingIds = listingIds;
+        
+        if (datasetId && (!listingIds || listingIds.length === 0)) {
+          const { data: datasetListings, error: datasetError } = await supabaseServer
+            .schema('public')
+            .from('dataset_listings')
+            .select('listing_id')
+            .eq('dataset_id', datasetId);
+
+          if (datasetError) {
+            throw new Error(`Failed to get dataset listings: ${datasetError.message}`);
+          }
+
+          if (datasetListings && datasetListings.length > 0) {
+            filteredListingIds = datasetListings.map(dl => dl.listing_id);
+          } else {
+            // No listings in dataset, return empty
+            return [];
+          }
+        }
+
         let query = supabaseServer
           .schema('pipeline')
           .from('listings')
@@ -59,8 +87,8 @@ export const sanitizeJob = inngest.createFunction(
           .eq('status', 'active'); // Only process active listings (exclude expired, sold, removed)
 
         // Apply filters if provided
-        if (listingIds && listingIds.length > 0) {
-          query = query.in('id', listingIds);
+        if (filteredListingIds && filteredListingIds.length > 0) {
+          query = query.in('id', filteredListingIds);
         }
 
         if (limit) {

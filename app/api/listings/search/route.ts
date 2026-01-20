@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50', 10);
     const offset = parseInt(searchParams.get('offset') || '0', 10);
     const status = searchParams.get('status');
-    const jobId = searchParams.get('job_id');
+    const datasetId = searchParams.get('dataset_id');
     const marketplace = searchParams.get('marketplace');
     const enriched = searchParams.get('enriched'); // 'true' or 'false' as string
 
@@ -31,9 +31,34 @@ export async function GET(request: NextRequest) {
       countQuery = countQuery.eq('status', status);
     }
 
-    if (jobId) {
-      query = query.eq('job_id', jobId);
-      countQuery = countQuery.eq('job_id', jobId);
+    if (datasetId) {
+      // Filter by dataset: get listing IDs from dataset_listings
+      const { data: datasetListings, error: datasetError } = await supabaseServer
+        .schema('public')
+        .from('dataset_listings')
+        .select('listing_id')
+        .eq('dataset_id', datasetId);
+
+      if (datasetError) {
+        return NextResponse.json(
+          { error: `Failed to get dataset listings: ${datasetError.message}` },
+          { status: 500 }
+        );
+      }
+
+      if (datasetListings && datasetListings.length > 0) {
+        const listingIds = datasetListings.map(dl => dl.listing_id);
+        query = query.in('id', listingIds);
+        countQuery = countQuery.in('id', listingIds);
+      } else {
+        // No listings in dataset, return empty result
+        return NextResponse.json({
+          listings: [],
+          total: 0,
+          limit,
+          offset,
+        });
+      }
     }
 
     if (marketplace) {

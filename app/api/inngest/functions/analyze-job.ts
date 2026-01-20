@@ -25,18 +25,24 @@ export const analyzeJob = inngest.createFunction(
   { id: INNGEST_FUNCTION_IDS.ANALYZE_JOB },
   { event: 'job/analyze.triggered' },
   async ({ event, step }) => {
-    const { listingIds, limit } = event.data;
+    const { listingIds, limit, datasetId } = event.data;
 
     // Step 1: Create job record
     const job = await step.run('create-job', async () => {
       const jobService = new BaseJobService(supabaseServer);
+      const metadata: Record<string, unknown> = {
+        listingIds: listingIds || null,
+        limit: limit || null,
+      };
+      
+      if (datasetId) {
+        metadata.dataset_id = datasetId;
+      }
+      
       return await jobService.createJob(
         'analyze_listings' as JobType,
         'all', // Marketplace doesn't really apply to analysis
-        {
-          listingIds: listingIds || null,
-          limit: limit || null,
-        }
+        metadata
       );
     });
 
@@ -49,16 +55,41 @@ export const analyzeJob = inngest.createFunction(
     // Step 3: Get listings to analyze
     let listingIdsToAnalyze: string[];
 
-    if (listingIds && listingIds.length > 0) {
-      // Use provided listing IDs
-      listingIdsToAnalyze = listingIds;
+    // If dataset_id is provided and listingIds is not provided, get listing IDs from dataset
+    let resolvedListingIds = listingIds;
+    if (datasetId && (!listingIds || listingIds.length === 0)) {
+      const datasetListingIds = await step.run('get-dataset-listing-ids', async () => {
+        const { data: datasetListings, error: datasetError } = await supabaseServer
+          .schema('public')
+          .from('dataset_listings')
+          .select('listing_id')
+          .eq('dataset_id', datasetId);
+
+        if (datasetError) {
+          throw new Error(`Failed to get dataset listings: ${datasetError.message}`);
+        }
+
+        return datasetListings ? datasetListings.map(dl => dl.listing_id) : [];
+      });
+      
+      if (datasetListingIds.length > 0) {
+        resolvedListingIds = datasetListingIds;
+      } else {
+        // No listings in dataset, return empty
+        resolvedListingIds = [];
+      }
+    }
+
+    if (resolvedListingIds && resolvedListingIds.length > 0) {
+      // Use provided listing IDs (or dataset listing IDs)
+      listingIdsToAnalyze = resolvedListingIds;
 
       await step.run('update-progress-found', async () => {
         const jobService = new BaseJobService(supabaseServer);
         await jobService.updateJobProgress(
           jobId,
-          `Found ${listingIds.length} listings to analyze...`,
-          { listings_found: listingIds.length }
+          `Found ${resolvedListingIds.length} listings to analyze...`,
+          { listings_found: resolvedListingIds.length }
         );
       });
     } else {
@@ -92,6 +123,27 @@ export const analyzeJob = inngest.createFunction(
           .from('listings')
           .select('id')
           .eq('status', 'active');
+
+        // Filter by dataset if provided
+        if (datasetId) {
+          const { data: datasetListings, error: datasetError } = await supabaseServer
+            .schema('public')
+            .from('dataset_listings')
+            .select('listing_id')
+            .eq('dataset_id', datasetId);
+
+          if (datasetError) {
+            throw new Error(`Failed to get dataset listings: ${datasetError.message}`);
+          }
+
+          if (datasetListings && datasetListings.length > 0) {
+            const datasetListingIds = datasetListings.map(dl => dl.listing_id);
+            query = query.in('id', datasetListingIds);
+          } else {
+            // No listings in dataset, return empty
+            return [];
+          }
+        }
 
         // Only apply limit if explicitly provided
         if (limit) {

@@ -2,11 +2,18 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Card,
   CardContent,
@@ -15,6 +22,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import type { Dataset } from '@/lib/types';
 import { useTriggerEnrich } from '@/hooks/use-enrich';
 import { useBackendStatus } from '@/hooks/use-backend-status';
 import { useToast } from '@/hooks/use-toast';
@@ -28,9 +36,32 @@ export default function EnrichPage() {
   const [delayMs, setDelayMs] = useState('200');
   const [limitError, setLimitError] = useState('');
   const [delayError, setDelayError] = useState('');
+  const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string | undefined>(undefined);
+  const [loadingDatasets, setLoadingDatasets] = useState(false);
 
   const { data: status, isLoading: loadingStatus } = useBackendStatus();
   const triggerEnrich = useTriggerEnrich();
+
+  // Fetch datasets on mount
+  useEffect(() => {
+    const fetchDatasets = async () => {
+      setLoadingDatasets(true);
+      try {
+        const response = await fetch('/api/datasets');
+        if (response.ok) {
+          const data = await response.json();
+          setDatasets(data);
+        }
+      } catch (error) {
+        console.error('Error fetching datasets:', error);
+      } finally {
+        setLoadingDatasets(false);
+      }
+    };
+
+    fetchDatasets();
+  }, []);
 
   // Generate JSON payload for Inngest
   const inngestPayload = useMemo(() => {
@@ -38,6 +69,7 @@ export default function EnrichPage() {
       marketplace: string;
       limit?: number;
       delayMs?: number;
+      datasetId?: string;
     } = {
       marketplace: 'ebay',
     };
@@ -56,11 +88,15 @@ export default function EnrichPage() {
       }
     }
 
+    if (selectedDatasetId) {
+      payload.datasetId = selectedDatasetId;
+    }
+
     return {
       name: 'job/enrich.triggered',
       data: payload,
     };
-  }, [limit, delayMs]);
+  }, [limit, delayMs, selectedDatasetId]);
 
   const validateForm = (): boolean => {
     let isValid = true;
@@ -95,6 +131,7 @@ export default function EnrichPage() {
       marketplace: string;
       limit?: number;
       delayMs?: number;
+      datasetId?: string;
     } = {
       marketplace: 'ebay',
     };
@@ -111,6 +148,10 @@ export default function EnrichPage() {
       if (!isNaN(delayNum) && delayNum >= 0) {
         payload.delayMs = delayNum;
       }
+    }
+
+    if (selectedDatasetId) {
+      payload.datasetId = selectedDatasetId;
     }
 
     triggerEnrich.mutate(payload, {
@@ -159,6 +200,29 @@ export default function EnrichPage() {
                 {status.enrichment.unenriched} out of {status.enrichment.total} listings not enriched.
               </p>
             )}
+
+            <div className="space-y-2">
+              <Label htmlFor="dataset">Dataset (optional)</Label>
+              <Select 
+                value={selectedDatasetId || undefined} 
+                onValueChange={(value) => setSelectedDatasetId(value || undefined)}
+              >
+                <SelectTrigger id="dataset" className="w-full">
+                  <SelectValue placeholder="Select a dataset (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {datasets.map((dataset) => (
+                    <SelectItem key={dataset.id} value={dataset.id}>
+                      {dataset.name}
+                      {dataset.listing_count !== undefined && ` (${dataset.listing_count} listings)`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Optional. If selected, only enriches listings from this dataset. Leave unselected to process all listings.
+              </p>
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="limit">Limit (optional)</Label>

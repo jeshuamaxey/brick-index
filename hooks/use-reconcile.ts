@@ -8,6 +8,7 @@ export interface ReconcilePayload {
   listingIds?: string[];
   limit?: number;
   rerun?: boolean;
+  datasetId?: string;
 }
 
 export interface ReconcileResponse {

@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 export interface SanitizePayload {
   listingIds?: string[];
   limit?: number;
+  datasetId?: string;
 }
 
 export interface SanitizeResponse {

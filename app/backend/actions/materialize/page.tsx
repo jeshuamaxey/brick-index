@@ -35,6 +35,11 @@ export default function MaterializePage() {
 
   const { data: captureJobs, isLoading: loadingJobs } = useCaptureJobs();
   const triggerMaterialize = useTriggerMaterialize();
+  const [datasetName, setDatasetName] = useState<string | null>(null);
+  const [loadingDataset, setLoadingDataset] = useState(false);
+
+  // Compute selectedJob before it's used in useEffect
+  const selectedJob = captureJobs?.find(job => job.id === captureJobId);
 
   // Set default capture job when jobs load
   useEffect(() => {
@@ -42,6 +47,43 @@ export default function MaterializePage() {
       setCaptureJobId(captureJobs[0].id);
     }
   }, [captureJobs, captureJobId]);
+
+  // Fetch dataset name when capture job is selected
+  useEffect(() => {
+    const fetchDatasetName = async () => {
+      if (!captureJobId || !selectedJob) {
+        setDatasetName(null);
+        return;
+      }
+
+      const metadata = selectedJob.metadata as Record<string, unknown> | null;
+      const datasetId = metadata?.dataset_id as string | undefined;
+
+      if (!datasetId) {
+        setDatasetName(null);
+        return;
+      }
+
+      setLoadingDataset(true);
+      try {
+        const response = await fetch(`/api/datasets`);
+        if (response.ok) {
+          const datasets = await response.json();
+          const dataset = datasets.find((d: { id: string }) => d.id === datasetId);
+          setDatasetName(dataset?.name || null);
+        } else {
+          setDatasetName(null);
+        }
+      } catch (error) {
+        console.error('Error fetching dataset:', error);
+        setDatasetName(null);
+      } finally {
+        setLoadingDataset(false);
+      }
+    };
+
+    fetchDatasetName();
+  }, [captureJobId, selectedJob]);
 
   // Generate JSON payload for Inngest
   const inngestPayload = useMemo(() => {
@@ -63,8 +105,6 @@ export default function MaterializePage() {
       return 'N/A';
     }
   };
-
-  const selectedJob = captureJobs?.find(job => job.id === captureJobId);
 
   const handleSubmit = () => {
     if (!captureJobId) {
@@ -146,21 +186,35 @@ export default function MaterializePage() {
                         <SelectValue placeholder="Select a capture job" />
                       </SelectTrigger>
                       <SelectContent>
-                        {captureJobs.map((job) => (
-                          <SelectItem key={job.id} value={job.id}>
-                            <span className="font-medium">{job.status}</span>
-                            {job.rawListingsCount !== undefined && ` - ${job.rawListingsCount.toLocaleString()} raw listings`}
-                            {job.metadata?.keywords && ` (${job.metadata.keywords.join(', ')})`}
-                          </SelectItem>
-                        ))}
+                        {captureJobs.map((job) => {
+                          const jobMetadata = job.metadata as Record<string, unknown> | null;
+                          const jobDatasetName = jobMetadata?.dataset_name as string | undefined;
+                          return (
+                            <SelectItem key={job.id} value={job.id}>
+                              <span className="font-medium">{job.status}</span>
+                              {job.rawListingsCount !== undefined && ` - ${job.rawListingsCount.toLocaleString()} raw listings`}
+                              {jobDatasetName && ` - Dataset: ${jobDatasetName}`}
+                              {job.metadata?.keywords && ` (${job.metadata.keywords.join(', ')})`}
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                     {selectedJob && (
-                      <p className="text-xs text-muted-foreground">
-                        Started: {formatDateTime(selectedJob.started_at)} | 
-                        Completed: {formatDateTime(selectedJob.completed_at)} | 
-                        Status: {selectedJob.status}
-                      </p>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">
+                          Started: {formatDateTime(selectedJob.started_at)} | 
+                          Completed: {formatDateTime(selectedJob.completed_at)} | 
+                          Status: {selectedJob.status}
+                        </p>
+                        {loadingDataset ? (
+                          <p className="text-xs text-muted-foreground">Loading dataset...</p>
+                        ) : datasetName ? (
+                          <p className="text-xs text-muted-foreground">
+                            Dataset: <span className="font-medium">{datasetName}</span>
+                          </p>
+                        ) : null}
+                      </div>
                     )}
                   </div>
 

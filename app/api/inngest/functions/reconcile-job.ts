@@ -60,6 +60,7 @@ export const reconcileJob = inngest.createFunction(
       reconciliationVersion,
       cleanupMode = 'supersede',
       rerun = false,
+      datasetId,
     } = event.data;
 
     // Use provided version or default to current version
@@ -69,16 +70,22 @@ export const reconcileJob = inngest.createFunction(
     // Step 1: Create job record
     const job = await step.run('create-job', async () => {
       const jobService = new BaseJobService(supabaseServer);
+      const metadata: Record<string, unknown> = {
+        listingIds: listingIds || null,
+        limit: limit || null,
+        reconciliationVersion: versionToUse,
+        cleanupMode: cleanupMode,
+        rerun: rerun,
+      };
+      
+      if (datasetId) {
+        metadata.dataset_id = datasetId;
+      }
+      
       const createdJob = await jobService.createJob(
         'reconcile' as JobType,
         'all', // Marketplace doesn't really apply to reconcile
-        {
-          listingIds: listingIds || null,
-          limit: limit || null,
-          reconciliationVersion: versionToUse,
-          cleanupMode: cleanupMode,
-          rerun: rerun,
-        }
+        metadata
       );
       return createdJob;
     });
@@ -91,16 +98,41 @@ export const reconcileJob = inngest.createFunction(
     // Step 3: Get listings to reconcile
     let listingIdsToReconcile: string[];
 
-    if (listingIds && listingIds.length > 0) {
-      // Use provided listing IDs
-      listingIdsToReconcile = listingIds;
+    // If dataset_id is provided and listingIds is not provided, get listing IDs from dataset
+    let resolvedListingIds = listingIds;
+    if (datasetId && (!listingIds || listingIds.length === 0)) {
+      const datasetListingIds = await step.run('get-dataset-listing-ids', async () => {
+        const { data: datasetListings, error: datasetError } = await supabaseServer
+          .schema('public')
+          .from('dataset_listings')
+          .select('listing_id')
+          .eq('dataset_id', datasetId);
+
+        if (datasetError) {
+          throw new Error(`Failed to get dataset listings: ${datasetError.message}`);
+        }
+
+        return datasetListings ? datasetListings.map(dl => dl.listing_id) : [];
+      });
+      
+      if (datasetListingIds.length > 0) {
+        resolvedListingIds = datasetListingIds;
+      } else {
+        // No listings in dataset, return empty
+        resolvedListingIds = [];
+      }
+    }
+
+    if (resolvedListingIds && resolvedListingIds.length > 0) {
+      // Use provided listing IDs (or dataset listing IDs)
+      listingIdsToReconcile = resolvedListingIds;
 
       await step.run('update-progress-found', async () => {
         const jobService = new BaseJobService(supabaseServer);
         await jobService.updateJobProgress(
           jobId,
-          `Found ${listingIds.length} listings to reconcile...`,
-          { listings_found: listingIds.length }
+          `Found ${resolvedListingIds.length} listings to reconcile...`,
+          { listings_found: resolvedListingIds.length }
         );
       });
     } else {
@@ -125,6 +157,27 @@ export const reconcileJob = inngest.createFunction(
           .from('listings')
           .select('id, reconciliation_version, reconciled_at')
           .eq('status', 'active');
+
+        // Filter by dataset if provided
+        if (datasetId) {
+          const { data: datasetListings, error: datasetError } = await supabaseServer
+            .schema('public')
+            .from('dataset_listings')
+            .select('listing_id')
+            .eq('dataset_id', datasetId);
+
+          if (datasetError) {
+            throw new Error(`Failed to get dataset listings: ${datasetError.message}`);
+          }
+
+          if (datasetListings && datasetListings.length > 0) {
+            const datasetListingIds = datasetListings.map(dl => dl.listing_id);
+            query = query.in('id', datasetListingIds);
+          } else {
+            // No listings in dataset, return empty
+            return [];
+          }
+        }
 
         // Apply limit if provided (we'll filter after fetching)
         if (limit) {

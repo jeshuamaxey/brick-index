@@ -593,6 +593,91 @@ export type Database = {
   }
   public: {
     Tables: {
+      dataset_listings: {
+        Row: {
+          added_at: string | null
+          dataset_id: string
+          id: string
+          listing_id: string
+        }
+        Insert: {
+          added_at?: string | null
+          dataset_id: string
+          id?: string
+          listing_id: string
+        }
+        Update: {
+          added_at?: string | null
+          dataset_id?: string
+          id?: string
+          listing_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dataset_listings_dataset_id_fkey"
+            columns: ["dataset_id"]
+            isOneToOne: false
+            referencedRelation: "datasets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dataset_raw_listings: {
+        Row: {
+          added_at: string | null
+          dataset_id: string
+          id: string
+          raw_listing_id: string
+        }
+        Insert: {
+          added_at?: string | null
+          dataset_id: string
+          id?: string
+          raw_listing_id: string
+        }
+        Update: {
+          added_at?: string | null
+          dataset_id?: string
+          id?: string
+          raw_listing_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dataset_raw_listings_dataset_id_fkey"
+            columns: ["dataset_id"]
+            isOneToOne: false
+            referencedRelation: "datasets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      datasets: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       ebay_marketplace_account_deletion_notifications: {
         Row: {
           created_at: string

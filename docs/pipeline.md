@@ -454,6 +454,29 @@ stateDiagram-v2
     Failed --> [*]
 ```
 
+## Datasets
+
+The system supports **datasets** - user-specific collections of listings that can be tracked through the entire pipeline. Datasets allow users to:
+
+- Group listings from specific capture queries (e.g., "Harry Potter LEGO sets")
+- Track listings at both the `raw_listings` and `listings` stages
+- Filter pipeline jobs to operate only on listings within a specific dataset
+- View and filter listings by dataset in the listings UI
+
+### Dataset Features
+
+- **Automatic Creation**: Datasets are automatically created when a capture job is triggered with a dataset name
+- **Multi-Stage Tracking**: Datasets track both `raw_listings` (from capture) and `listings` (from materialize)
+- **Pipeline Integration**: All pipeline jobs (enrich, materialize, sanitize, reconcile, analyze) can filter by dataset
+- **User Isolation**: Datasets are user-specific with Row Level Security (RLS) policies
+- **Automatic Association**: When materialize creates listings from raw_listings in a dataset, those listings are automatically associated with the dataset
+
+### Dataset Tables
+
+- **`public.datasets`**: User-specific dataset definitions (name, description, timestamps)
+- **`public.dataset_raw_listings`**: Junction table linking datasets to `raw_listings`
+- **`public.dataset_listings`**: Junction table linking datasets to `listings`
+
 ## Schema Organization
 
 ### `pipeline` Schema
@@ -539,6 +562,9 @@ The frontend UI (`/backend/resources/jobs`) provides real-time job monitoring:
 | `/api/sanitize/trigger` | POST | Trigger sanitize job | `sanitize_listings` |
 | `/api/reconcile/trigger` | POST | Trigger reconcile job | `reconcile` |
 | `/api/analyze/trigger` | POST | Trigger analysis job | `analyze_listings` |
+| `/api/datasets` | GET | Get all datasets for current user | - |
+| `/api/datasets` | POST | Create a new dataset | - |
+| `/api/listings/search` | GET | Search listings (supports `dataset_id` filter) | - |
 | `/api/jobs` | GET | View all jobs with optional filtering | - |
 | `/api/jobs/cleanup` | POST | Manually trigger stale job cleanup | - |
 | `/api/jobs/cleanup` | GET | Get stale job statistics | - |
@@ -556,6 +582,7 @@ The frontend UI (`/backend/resources/jobs`) provides real-time job monitoring:
 9. **Modular Value Evaluation**: Value evaluators are pluggable, allowing different evaluation strategies
 10. **Deduplication**: Prevents duplicate listings while tracking when listings are seen again
 11. **Analysis Versioning**: Analysis records include version numbers for algorithm changes
+12. **Dataset Support**: User-specific datasets allow tracking and filtering listings through the entire pipeline, from capture to analysis
 12. **Rate Limiting**: Enrichment includes configurable delays to prevent API abuse
 13. **Unified Job Processing**: All async operations use the same job tracking system for consistency
 14. **Progress Tracking**: Jobs report progress at regular intervals for visibility and stale detection

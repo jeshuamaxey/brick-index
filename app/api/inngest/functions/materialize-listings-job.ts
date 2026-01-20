@@ -5,6 +5,7 @@ import { inngest } from '@/lib/inngest/client';
 import { supabaseServer } from '@/lib/supabase/server';
 import { BaseJobService } from '@/lib/jobs/base-job-service';
 import { DeduplicationService } from '@/lib/capture/deduplication-service';
+import { DatasetService } from '@/lib/datasets/dataset-service';
 import { EbayAdapter } from '@/lib/capture/marketplace-adapters/ebay-adapter';
 import { EbaySnapshotAdapter } from '@/lib/capture/marketplace-adapters/ebay-snapshot-adapter';
 import { extractEnrichmentFields } from '@/lib/capture/enrichment-utils';
@@ -68,20 +69,48 @@ export const materializeListingsJob = inngest.createFunction(
     let jobId: string | null = null;
 
     try {
-      const { captureJobId, marketplace } = event.data;
+      const { captureJobId, marketplace, datasetId } = event.data;
 
-      // Step 1: Create materialize job record
+      // Step 1: Get dataset_id from capture job metadata if not provided
+      const resolvedDatasetId = await step.run('get-dataset-id', async () => {
+        if (datasetId) {
+          return datasetId;
+        }
+        
+        // Try to get from capture job metadata
+        const { data: captureJob, error } = await supabaseServer
+          .schema('pipeline')
+          .from('jobs')
+          .select('metadata')
+          .eq('id', captureJobId)
+          .single();
+        
+        if (error || !captureJob) {
+          return null;
+        }
+        
+        const metadata = captureJob.metadata as Record<string, unknown> | null;
+        return metadata?.dataset_id as string | undefined || null;
+      });
+
+      // Step 2: Create materialize job record
       const job = await step.run('create-job', async () => {
         const jobService = new BaseJobService(supabaseServer);
         const jobType: JobType = `${marketplace}_materialize_listings` as JobType;
-        return await jobService.createJob(jobType, marketplace, {
+        const metadata: Record<string, unknown> = {
           captureJobId,
-        });
+        };
+        
+        if (resolvedDatasetId) {
+          metadata.dataset_id = resolvedDatasetId;
+        }
+        
+        return await jobService.createJob(jobType, marketplace, metadata);
       });
 
       jobId = job.id;
 
-      // Step 2: Get raw listing IDs from capture job
+      // Step 3: Get raw listing IDs from capture job
       const rawListingIds = await step.run('get-raw-listing-ids', async () => {
         const { data: rawListings, error } = await supabaseServer
           .schema('pipeline')
@@ -102,7 +131,7 @@ export const materializeListingsJob = inngest.createFunction(
 
       const listingsFound = rawListingIds.length;
 
-      // Step 3: Update progress - found raw listings
+      // Step 4: Update progress - found raw listings
       await step.run('update-progress-found', async () => {
         const jobService = new BaseJobService(supabaseServer);
         await jobService.updateJobProgress(
@@ -112,7 +141,7 @@ export const materializeListingsJob = inngest.createFunction(
         );
       });
 
-      // Step 4: Process batches: transform, deduplicate, insert/update all in one step
+      // Step 5: Process batches: transform, deduplicate, insert/update all in one step
       // This ensures we only return counts (not full listing objects) to keep step outputs small
       let listingsNew = 0;
       let listingsUpdated = 0;
@@ -233,10 +262,11 @@ export const materializeListingsJob = inngest.createFunction(
               };
             });
 
-            const { error: insertError } = await supabaseServer
+            const { data: insertedListings, error: insertError } = await supabaseServer
               .schema('pipeline')
               .from('listings')
-              .insert(listingsToInsert);
+              .insert(listingsToInsert)
+              .select('id, raw_listing_id');
 
             if (insertError) {
               const errorMessage = insertError.message || JSON.stringify(insertError);
@@ -253,6 +283,63 @@ export const materializeListingsJob = inngest.createFunction(
               newCount = 0;
             } else {
               newCount = newListings.length;
+              
+              // Associate new listings with datasets based on their raw_listing_id
+              if (insertedListings && insertedListings.length > 0) {
+                const datasetService = new DatasetService(supabaseServer);
+                
+                // Get raw_listing_ids for the new listings
+                const rawListingIds = insertedListings
+                  .map(l => l.raw_listing_id)
+                  .filter(Boolean) as string[];
+                
+                if (rawListingIds.length > 0) {
+                  // Find which datasets these raw_listings belong to
+                  const { data: datasetRawListings, error: datasetError } = await supabaseServer
+                    .schema('public')
+                    .from('dataset_raw_listings')
+                    .select('dataset_id, raw_listing_id')
+                    .in('raw_listing_id', rawListingIds);
+                  
+                  if (!datasetError && datasetRawListings) {
+                    // Group by dataset_id
+                    const datasetMap = new Map<string, string[]>();
+                    for (const drl of datasetRawListings) {
+                      if (!datasetMap.has(drl.dataset_id)) {
+                        datasetMap.set(drl.dataset_id, []);
+                      }
+                      datasetMap.get(drl.dataset_id)!.push(drl.raw_listing_id);
+                    }
+                    
+                    // For each dataset, find the corresponding listing IDs
+                    for (const [datasetId, rawListingIdsInDataset] of datasetMap.entries()) {
+                      const listingIdsForDataset = insertedListings
+                        .filter(l => rawListingIdsInDataset.includes(l.raw_listing_id || ''))
+                        .map(l => l.id);
+                      
+                      if (listingIdsForDataset.length > 0) {
+                        try {
+                          await datasetService.addListingsToDataset(datasetId, listingIdsForDataset);
+                        } catch (datasetError) {
+                          // Log but don't fail the job if dataset association fails
+                          console.error('Error adding new listings to dataset:', datasetError);
+                        }
+                      }
+                    }
+                  }
+                }
+                
+                // Also add to explicitly specified dataset if provided (for backwards compatibility)
+                if (resolvedDatasetId) {
+                  const newListingIds = insertedListings.map(l => l.id);
+                  try {
+                    await datasetService.addListingsToDataset(resolvedDatasetId, newListingIds);
+                  } catch (datasetError) {
+                    // Log but don't fail the job if dataset association fails
+                    console.error('Error adding new listings to explicit dataset:', datasetError);
+                  }
+                }
+              }
             }
           }
 
@@ -284,6 +371,73 @@ export const materializeListingsJob = inngest.createFunction(
               updatedCount = 0;
             } else {
               updatedCount = existingIds.size;
+              
+              // Associate existing listings with datasets based on their raw_listing_id
+              if (existingIds.size > 0) {
+                const existingIdsArray = Array.from(existingIds.values());
+                
+                // Get raw_listing_ids for the existing listings
+                const { data: existingListings, error: fetchError } = await supabaseServer
+                  .schema('pipeline')
+                  .from('listings')
+                  .select('id, raw_listing_id')
+                  .in('id', existingIdsArray);
+                
+                if (!fetchError && existingListings) {
+                  const datasetService = new DatasetService(supabaseServer);
+                  
+                  const rawListingIds = existingListings
+                    .map(l => l.raw_listing_id)
+                    .filter(Boolean) as string[];
+                  
+                  if (rawListingIds.length > 0) {
+                    // Find which datasets these raw_listings belong to
+                    const { data: datasetRawListings, error: datasetError } = await supabaseServer
+                      .schema('public')
+                      .from('dataset_raw_listings')
+                      .select('dataset_id, raw_listing_id')
+                      .in('raw_listing_id', rawListingIds);
+                    
+                    if (!datasetError && datasetRawListings) {
+                      // Group by dataset_id
+                      const datasetMap = new Map<string, string[]>();
+                      for (const drl of datasetRawListings) {
+                        if (!datasetMap.has(drl.dataset_id)) {
+                          datasetMap.set(drl.dataset_id, []);
+                        }
+                        datasetMap.get(drl.dataset_id)!.push(drl.raw_listing_id);
+                      }
+                      
+                      // For each dataset, find the corresponding listing IDs
+                      for (const [datasetId, rawListingIdsInDataset] of datasetMap.entries()) {
+                        const listingIdsForDataset = existingListings
+                          .filter(l => rawListingIdsInDataset.includes(l.raw_listing_id || ''))
+                          .map(l => l.id);
+                        
+                        if (listingIdsForDataset.length > 0) {
+                          try {
+                            await datasetService.addListingsToDataset(datasetId, listingIdsForDataset);
+                          } catch (datasetError) {
+                            // Log but don't fail the job if dataset association fails
+                            console.error('Error adding existing listings to dataset:', datasetError);
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                
+                // Also add to explicitly specified dataset if provided (for backwards compatibility)
+                if (resolvedDatasetId) {
+                  const datasetService = new DatasetService(supabaseServer);
+                  try {
+                    await datasetService.addListingsToDataset(resolvedDatasetId, existingIdsArray);
+                  } catch (datasetError) {
+                    // Log but don't fail the job if dataset association fails
+                    console.error('Error adding existing listings to explicit dataset:', datasetError);
+                  }
+                }
+              }
             }
           }
 
@@ -305,7 +459,7 @@ export const materializeListingsJob = inngest.createFunction(
         });
       }
 
-      // Step 5: Complete job
+      // Step 6: Complete job
       await step.run('complete-job', async () => {
         const jobService = new BaseJobService(supabaseServer);
         await jobService.completeJob(
