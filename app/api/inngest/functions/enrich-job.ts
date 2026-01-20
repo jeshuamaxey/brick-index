@@ -213,6 +213,47 @@ export const enrichJob = inngest.createFunction(
               `Error enriching raw listing ${rawListing.id}:`,
               errorMessage
             );
+
+            // If this is an "Item not found" error (404), mark the corresponding listing(s) as expired
+            // A 404 from eBay Browse API means the item is no longer available for purchase
+            // (could be sold, ended, removed, or temporarily disabled)
+            if (errorMessage.startsWith('Item not found:')) {
+              try {
+                // Extract itemId from the error message or from api_response
+                const apiResponse = rawListing.api_response as Record<string, unknown>;
+                const itemId = apiResponse.itemId as string | undefined;
+
+                if (itemId) {
+                  // Find and update corresponding listing(s) in the listings table
+                  const { error: updateStatusError } = await supabaseServer
+                    .schema('pipeline')
+                    .from('listings')
+                    .update({
+                      status: 'expired',
+                      updated_at: new Date().toISOString(),
+                    })
+                    .eq('external_id', itemId)
+                    .eq('marketplace', marketplace);
+
+                  if (updateStatusError) {
+                    console.error(
+                      `Failed to update listing status for itemId ${itemId}:`,
+                      updateStatusError
+                    );
+                  } else {
+                    console.log(
+                      `Marked listing(s) with external_id ${itemId} as expired due to Item not found error`
+                    );
+                  }
+                }
+              } catch (statusUpdateError) {
+                // Log but don't fail the entire batch if status update fails
+                console.error(
+                  `Error updating listing status for raw listing ${rawListing.id}:`,
+                  statusUpdateError
+                );
+              }
+            }
           }
         }
 

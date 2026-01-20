@@ -167,6 +167,7 @@ eBay Search API → raw_listings (with job_id)
 - **Batch processing**: Processes raw listings in batches of 50 per Inngest step
 - **Selective processing**: Only processes raw listings that haven't been enriched yet
 - **Optional capture job filtering**: Can enrich specific capture job's raw listings
+- **Error handling**: When items return 404 "Item not found" errors (indicating the listing is no longer available for purchase - sold, ended, removed, or temporarily disabled), the corresponding listings in the `listings` table are automatically marked as `status = 'expired'` to prevent unnecessary future processing
 
 **Data Flow**:
 ```
@@ -249,7 +250,7 @@ raw_listings (by captureJobId) → Transform → Deduplicate → listings (new/u
 **Purpose**: Clean HTML markup from listing title and description fields, converting them to plain text.
 
 **Process**:
-1. Queries `pipeline.listings` for unsanitized listings (`sanitised_at IS NULL`)
+1. Queries `pipeline.listings` for unsanitized listings (`sanitised_at IS NULL` and `status = 'active'`)
 2. For each listing, sanitizes `title` and `description` fields:
    - Removes all HTML tags and markup
    - Removes images, SVGs, scripts, styles, and CSS
@@ -263,6 +264,7 @@ raw_listings (by captureJobId) → Transform → Deduplicate → listings (new/u
 - **Whitespace normalization**: Condenses multiple consecutive newlines to at most one blank line
 - **Batch processing**: Processes listings in batches of 50 per Inngest step
 - **Selective processing**: Can sanitize specific listings by ID or all unsanitized listings
+- **Status filtering**: Only processes active listings (excludes expired, sold, and removed listings)
 - **Graceful handling**: Handles plain text gracefully (no-op if no HTML present)
 
 **Data Flow**:
