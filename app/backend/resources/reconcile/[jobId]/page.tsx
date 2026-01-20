@@ -18,6 +18,12 @@ interface ExtractedId {
   validated: boolean;
 }
 
+interface ValidatedSet {
+  legoSetId: string;
+  setNum: string;
+  name: string;
+}
+
 interface Listing {
   listingId: string;
   title: string;
@@ -25,6 +31,7 @@ interface Listing {
   sanitisedTitle?: string | null;
   sanitisedDescription?: string | null;
   extractedIds: ExtractedId[];
+  validatedSets?: ValidatedSet[];
 }
 
 interface Job {
@@ -345,6 +352,7 @@ export default function ReconcileAnalysisPage() {
               sanitisedDescription={selectedListing.sanitisedDescription}
               extractedIds={selectedListing.extractedIds}
               regexPattern={regexPattern}
+              validatedSets={selectedListing.validatedSets || []}
               onCopyListingId={handleCopyListingId}
             />
           ) : (

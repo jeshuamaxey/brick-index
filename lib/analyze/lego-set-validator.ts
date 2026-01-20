@@ -3,17 +3,24 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/supabase.types';
 
+export interface ValidatedSetInfo {
+  legoSetId: string | null;
+  setNum: string | null;
+}
+
 export class LegoSetValidator {
   constructor(private supabase: SupabaseClient<Database>) {}
 
   /**
    * Validate extracted set IDs against the catalog.lego_sets table
-   * @param setIds - Array of extracted set IDs (e.g., ["75192-1", "10294"])
-   * @returns Map of set_num -> lego_set_id (UUID) for valid sets, null for invalid ones
+   * Uses prefix matching to handle cases where extracted ID (e.g., "75192") 
+   * matches database IDs with suffixes (e.g., "75192-1")
+   * @param setIds - Array of extracted set IDs (e.g., ["75192", "10294"])
+   * @returns Map of extracted ID -> { legoSetId, setNum } for valid sets, null values for invalid ones
    */
   async validateSetIds(
     setIds: string[]
-  ): Promise<Map<string, string | null>> {
+  ): Promise<Map<string, ValidatedSetInfo>> {
     if (setIds.length === 0) {
       return new Map();
     }
@@ -21,29 +28,68 @@ export class LegoSetValidator {
     // Remove duplicates
     const uniqueSetIds = Array.from(new Set(setIds));
 
-    // Query catalog.lego_sets for matching set_num values
-    const { data: legoSets, error } = await this.supabase
-      .schema('catalog')
-      .from('lego_sets')
-      .select('id, set_num')
-      .in('set_num', uniqueSetIds);
-
-    if (error) {
-      throw new Error(`Failed to validate set IDs: ${error.message}`);
-    }
-
-    // Create a map of set_num -> lego_set_id for found sets
-    const validatedMap = new Map<string, string | null>();
-    const foundSetNums = new Set((legoSets || []).map((set) => set.set_num));
-
+    // Create a map of extracted ID -> best matching set
+    const validatedMap = new Map<string, ValidatedSetInfo>();
+    
     // Initialize all set IDs as null (not found)
     for (const setId of uniqueSetIds) {
-      validatedMap.set(setId, null);
+      validatedMap.set(setId, { legoSetId: null, setNum: null });
     }
 
-    // Update with found set IDs
-    for (const set of legoSets || []) {
-      validatedMap.set(set.set_num, set.id);
+    // Process in batches to avoid query complexity issues
+    const BATCH_SIZE = 50;
+    
+    for (let i = 0; i < uniqueSetIds.length; i += BATCH_SIZE) {
+      const batch = uniqueSetIds.slice(i, i + BATCH_SIZE);
+      
+      // Query each ID in the batch separately for better performance and correctness
+      for (const extractedId of batch) {
+        // Query for exact match first (preferred)
+        const { data: exactMatch, error: exactError } = await this.supabase
+          .schema('catalog')
+          .from('lego_sets')
+          .select('id, set_num')
+          .eq('set_num', extractedId)
+          .limit(1)
+          .maybeSingle();
+
+        if (exactError) {
+          console.error(`[LegoSetValidator] Error querying exact match for "${extractedId}":`, exactError);
+          continue;
+        }
+
+        if (exactMatch) {
+          // Found exact match - use it
+          validatedMap.set(extractedId, {
+            legoSetId: exactMatch.id,
+            setNum: exactMatch.set_num,
+          });
+          continue;
+        }
+        
+        // No exact match, try prefix match (set_num LIKE 'id-%')
+        // Use ilike for case-insensitive matching (though set_num should be consistent)
+        const prefixPattern = `${extractedId}-%`;
+        const { data: prefixMatches, error: prefixError } = await this.supabase
+          .schema('catalog')
+          .from('lego_sets')
+          .select('id, set_num')
+          .ilike('set_num', prefixPattern)
+          .limit(1);
+
+        if (prefixError) {
+          console.error(`[LegoSetValidator] Error querying prefix match for "${extractedId}" with pattern "${prefixPattern}":`, prefixError);
+          continue;
+        }
+
+        if (prefixMatches && prefixMatches.length > 0) {
+          // Found prefix match - use the first one
+          validatedMap.set(extractedId, {
+            legoSetId: prefixMatches[0].id,
+            setNum: prefixMatches[0].set_num,
+          });
+        }
+      }
     }
 
     return validatedMap;
