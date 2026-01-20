@@ -7,6 +7,7 @@ export interface LegoSetsCountResponse {
 export interface ReconcilePayload {
   listingIds?: string[];
   limit?: number;
+  rerun?: boolean;
 }
 
 export interface ReconcileResponse {
