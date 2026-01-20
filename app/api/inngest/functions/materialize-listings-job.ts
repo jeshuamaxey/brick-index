@@ -75,8 +75,10 @@ export const materializeListingsJob = inngest.createFunction(
         );
       });
 
-      // Step 4: Transform listings in batches (query from database)
-      const listings: Listing[] = [];
+      // Step 4: Process batches: transform, deduplicate, insert/update all in one step
+      // This ensures we only return counts (not full listing objects) to keep step outputs small
+      let listingsNew = 0;
+      let listingsUpdated = 0;
       const batches = Math.ceil(rawListingIds.length / BATCH_SIZE);
 
       for (let i = 0; i < batches; i++) {
@@ -84,8 +86,10 @@ export const materializeListingsJob = inngest.createFunction(
         const end = Math.min(start + BATCH_SIZE, rawListingIds.length);
         const batchIds = rawListingIds.slice(start, end);
 
-        const transformed = await step.run(`transform-batch-${i}`, async () => {
-          // Fetch raw listings
+        // Process entire batch in one step: transform -> deduplicate -> insert/update
+        // Return only counts to keep step output small
+        const batchResult = await step.run(`process-batch-${i}`, async () => {
+          // 1. Fetch raw listings
           const { data: rawListings, error: fetchError } = await supabaseServer
             .schema('pipeline')
             .from('raw_listings')
@@ -94,10 +98,10 @@ export const materializeListingsJob = inngest.createFunction(
 
           if (fetchError || !rawListings) {
             console.error('Error fetching raw listings:', fetchError);
-            return [];
+            return { new: 0, updated: 0 };
           }
 
-          // Fetch enrichment details for these raw listings
+          // 2. Fetch enrichment details for these raw listings
           const { data: rawListingDetails, error: detailsError } = await supabaseServer
             .schema('pipeline')
             .from('raw_listing_details')
@@ -109,7 +113,7 @@ export const materializeListingsJob = inngest.createFunction(
             // Continue without enrichment data rather than failing
           }
 
-          // Create a map of raw_listing_id -> raw_listing_details for quick lookup
+          // 3. Create a map of raw_listing_id -> raw_listing_details for quick lookup
           const detailsMap = new Map<string, { id: string; api_response: Json }>();
           if (rawListingDetails) {
             for (const detail of rawListingDetails) {
@@ -120,7 +124,7 @@ export const materializeListingsJob = inngest.createFunction(
             }
           }
 
-          // Create adapter again (can't serialize between steps)
+          // 4. Create adapter (can't serialize between steps)
           let adapter: MarketplaceAdapter;
           if (marketplace === 'ebay') {
             const ebayAppId = process.env.EBAY_APP_ID;
@@ -140,6 +144,7 @@ export const materializeListingsJob = inngest.createFunction(
             throw new Error(`Unsupported marketplace: ${marketplace}`);
           }
 
+          // 5. Transform listings
           const transformedListings: Listing[] = [];
           for (const rawListing of rawListings) {
             try {
@@ -169,52 +174,15 @@ export const materializeListingsJob = inngest.createFunction(
               console.error('Error transforming listing:', error);
             }
           }
-          return transformedListings;
-        });
 
-        listings.push(...transformed);
+          // 6. Deduplicate (checks database for existing listings - handles cross-batch duplicates correctly)
+          const deduplicationService = new DeduplicationService(supabaseServer);
+          const { newListings, existingIds } = await deduplicationService.deduplicateListings(transformedListings);
 
-        // Update progress after each batch
-        await step.run(`update-progress-transforming-${i}`, async () => {
-          const jobService = new BaseJobService(supabaseServer);
-          await jobService.updateJobProgress(
-            jobId!,
-            `Processing ${listings.length} of ${listingsFound} listings...`,
-            { listings_found: listingsFound }
-          );
-        });
-      }
-
-      // Step 5: Update progress - deduplicating
-      await step.run('update-progress-deduplicating', async () => {
-        const jobService = new BaseJobService(supabaseServer);
-        await jobService.updateJobProgress(jobId!, 'Deduplicating listings...', {
-          listings_found: listingsFound,
-        });
-      });
-
-      // Step 6: Deduplicate listings
-      const { newListings, existingIdsArray } = await step.run('deduplicate', async () => {
-        const deduplicationService = new DeduplicationService(supabaseServer);
-        const { newListings, existingIds } = await deduplicationService.deduplicateListings(listings);
-        // Convert Map to array for serialization between steps
-        return {
-          newListings,
-          existingIdsArray: Array.from(existingIds.values()),
-        };
-      });
-
-      // Step 7: Insert new listings in batches
-      let listingsNew = 0;
-      if (newListings.length > 0) {
-        const newBatches = Math.ceil(newListings.length / BATCH_SIZE);
-        for (let i = 0; i < newBatches; i++) {
-          const start = i * BATCH_SIZE;
-          const end = Math.min(start + BATCH_SIZE, newListings.length);
-          const batch = newListings.slice(start, end);
-
-          const inserted = await step.run(`insert-batch-${i}`, async () => {
-            const listingsToInsert = batch.map((listing) => {
+          // 7. Insert new listings
+          let newCount = 0;
+          if (newListings.length > 0) {
+            const listingsToInsert = newListings.map((listing) => {
               const { id, ...listingWithoutId } = listing;
               return {
                 ...listingWithoutId,
@@ -233,26 +201,15 @@ export const materializeListingsJob = inngest.createFunction(
 
             if (insertError) {
               console.error('Error inserting new listings:', insertError);
-              return 0;
+            } else {
+              newCount = newListings.length;
             }
-            return batch.length;
-          });
+          }
 
-          listingsNew += inserted;
-        }
-      }
-
-      // Step 8: Update existing listings
-      let listingsUpdated = 0;
-      if (existingIdsArray && existingIdsArray.length > 0) {
-        const updateBatches = Math.ceil(existingIdsArray.length / BATCH_SIZE);
-
-        for (let i = 0; i < updateBatches; i++) {
-          const start = i * BATCH_SIZE;
-          const end = Math.min(start + BATCH_SIZE, existingIdsArray.length);
-          const batch = existingIdsArray.slice(start, end) as string[];
-
-          const updated = await step.run(`update-batch-${i}`, async () => {
+          // 8. Update existing listings
+          let updatedCount = 0;
+          if (existingIds.size > 0) {
+            const existingIdsArray = Array.from(existingIds.values());
             const { error: updateError } = await supabaseServer
               .schema('pipeline')
               .from('listings')
@@ -260,20 +217,34 @@ export const materializeListingsJob = inngest.createFunction(
                 last_seen_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
               })
-              .in('id', batch);
+              .in('id', existingIdsArray);
 
             if (updateError) {
               console.error('Error updating existing listings:', updateError);
-              return 0;
+            } else {
+              updatedCount = existingIdsArray.length;
             }
-            return batch.length;
-          });
+          }
 
-          listingsUpdated += updated;
-        }
+          // Return only counts, not full listing objects
+          return { new: newCount, updated: updatedCount };
+        });
+
+        listingsNew += batchResult.new;
+        listingsUpdated += batchResult.updated;
+
+        // Update progress after each batch
+        await step.run(`update-progress-batch-${i}`, async () => {
+          const jobService = new BaseJobService(supabaseServer);
+          await jobService.updateJobProgress(
+            jobId!,
+            `Processing batch ${i + 1} of ${batches} (${listingsNew} new, ${listingsUpdated} updated)...`,
+            { listings_found: listingsFound }
+          );
+        });
       }
 
-      // Step 9: Complete job
+      // Step 5: Complete job
       await step.run('complete-job', async () => {
         const jobService = new BaseJobService(supabaseServer);
         await jobService.completeJob(
