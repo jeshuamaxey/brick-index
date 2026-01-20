@@ -55,7 +55,8 @@ export const sanitizeJob = inngest.createFunction(
           .schema('pipeline')
           .from('listings')
           .select('id, title, description')
-          .is('sanitised_at', null); // Only process unsanitized listings
+          .is('sanitised_at', null) // Only process unsanitized listings
+          .eq('status', 'active'); // Only process active listings (exclude expired, sold, removed)
 
         // Apply filters if provided
         if (listingIds && listingIds.length > 0) {
