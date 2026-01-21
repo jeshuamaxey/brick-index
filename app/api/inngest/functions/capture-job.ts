@@ -12,24 +12,6 @@ import type { Json } from '@/lib/supabase/supabase.types';
 
 import { INNGEST_FUNCTION_IDS } from './registry';
 
-// Logging helper for consistent prefixing
-const log = {
-  info: (message: string, data?: Record<string, unknown>) => {
-    console.log(`[CaptureJob] ${message}`, data ? JSON.stringify(data) : '');
-  },
-  error: (message: string, error?: unknown, data?: Record<string, unknown>) => {
-    console.error(`[CaptureJob] ERROR: ${message}`, {
-      error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
-      ...data,
-    });
-  },
-  debug: (message: string, data?: Record<string, unknown>) => {
-    if (process.env.DEBUG_CAPTURE_JOB === 'true') {
-      console.log(`[CaptureJob] DEBUG: ${message}`, data ? JSON.stringify(data) : '');
-    }
-  },
-};
-
 export const captureJob = inngest.createFunction(
   { id: INNGEST_FUNCTION_IDS.CAPTURE_JOB },
   { event: 'job/capture.triggered' },
@@ -42,14 +24,14 @@ export const captureJob = inngest.createFunction(
     try {
       const { marketplace, keywords, ebayParams, datasetId, datasetName, userId } = event.data;
       
-      log.info('Capture job started', {
+      log.info({
         marketplace,
         keywords,
         datasetId,
         datasetName,
         userId,
         ebayParams: ebayParams ? Object.keys(ebayParams as object) : null,
-      });
+      }, 'Capture job started');
 
       // Step 1: Create job record
       const job = await step.run('create-job', async () => {
@@ -70,7 +52,7 @@ export const captureJob = inngest.createFunction(
         }
         
         const createdJob = await jobService.createJob(jobType, marketplace, metadata, datasetId || null);
-        log.info('Job record created', { jobId: createdJob.id, jobType, marketplace });
+        log.info({ jobId: createdJob.id, jobType, marketplace }, 'Job record created');
         return createdJob;
       });
 
@@ -118,14 +100,14 @@ export const captureJob = inngest.createFunction(
         const fieldgroups = params?.fieldgroups || 'EXTENDED';
         const marketplaceId = params?.marketplaceId || process.env.EBAY_MARKETPLACE_ID || 'EBAY_US';
 
-        log.info('Search config prepared', {
+        log.info({
           jobId,
           keywordQuery,
           limit,
           maxResults,
           fieldgroups,
           marketplaceId,
-        });
+        }, 'Search config prepared');
 
         return {
           ebayAppId,
@@ -168,7 +150,7 @@ export const captureJob = inngest.createFunction(
           const items = response.itemSummaries || [];
           
           // Log eBay API response
-          log.info('eBay API response received', {
+          log.info({
             jobId,
             pageNumber,
             offset,
@@ -177,15 +159,15 @@ export const captureJob = inngest.createFunction(
             totalAvailable: response.total ?? null,
             hasNextPage: !!response.next,
             warningCount: response.warnings?.length ?? 0,
-          });
+          }, 'eBay API response received');
           
           // Log warnings separately if present
           if (response.warnings && response.warnings.length > 0) {
-            log.info('eBay API returned warnings', {
+            log.info({
               jobId,
               pageNumber,
               warnings: response.warnings,
-            });
+            }, 'eBay API returned warnings');
           }
           
           // Store immediately to database
@@ -203,7 +185,7 @@ export const captureJob = inngest.createFunction(
               .single();
 
             if (rawError) {
-              log.error('Failed to store raw listing', rawError, { jobId, pageNumber });
+              log.error({ err: rawError, jobId, pageNumber }, 'Failed to store raw listing');
               continue;
             }
 
@@ -224,14 +206,14 @@ export const captureJob = inngest.createFunction(
             currentTotal < searchConfig.maxResults &&
             (totalAvailable === null || offset + searchConfig.limit < totalAvailable);
 
-          log.debug('Page fetched', {
+          log.debug({
             jobId,
             pageNumber,
             itemsStored: ids.length,
             totalAvailable,
             shouldContinue,
             offset,
-          });
+          }, 'Page fetched');
 
           return {
             pageNumber,
@@ -266,20 +248,20 @@ export const captureJob = inngest.createFunction(
 
       const listingsFound = totalItems;
       
-      log.info('Search pagination complete', {
+      log.info({
         jobId,
         totalPages: pageNumber,
         listingsFound,
         rawListingIdsCount: rawListingIds.length,
-      });
+      }, 'Search pagination complete');
 
       // Step 5: Associate raw_listings with dataset if datasetId is provided
       if (datasetId && rawListingIds.length > 0) {
-        log.info('Associating raw listings with dataset', {
+        log.info({
           jobId,
           datasetId,
           rawListingCount: rawListingIds.length,
-        });
+        }, 'Associating raw listings with dataset');
         
         await step.run('associate-raw-listings-with-dataset', async () => {
           const { DatasetService } = await import('@/lib/datasets/dataset-service');
@@ -288,7 +270,7 @@ export const captureJob = inngest.createFunction(
           
           try {
             await datasetService.addRawListingsToDataset(datasetId, rawListingIds);
-            log.info('Dataset association complete', { jobId, datasetId });
+            log.info({ jobId, datasetId }, 'Dataset association complete');
           } catch (error) {
             // Log but don't fail the job if dataset association fails
             log.warn({ err: error, datasetId }, 'Error associating raw_listings with dataset (continuing)');
@@ -309,13 +291,13 @@ export const captureJob = inngest.createFunction(
       });
 
       const durationMs = Date.now() - startTime;
-      log.info('Capture job completed successfully', {
+      log.info({
         jobId,
         listingsFound,
         rawListingsStored: listingsFound,
         durationMs,
         durationFormatted: `${Math.round(durationMs / 1000)}s`,
-      });
+      }, 'Capture job completed successfully');
 
       return {
         jobId,
@@ -325,11 +307,12 @@ export const captureJob = inngest.createFunction(
       };
     } catch (error) {
       const durationMs = Date.now() - startTime;
-      log.error('Capture job failed', error, {
+      log.error({
+        err: error,
         jobId,
         durationMs,
         durationFormatted: `${Math.round(durationMs / 1000)}s`,
-      });
+      }, 'Capture job failed');
       
       // Mark job as failed if it was created
       if (jobId) {
