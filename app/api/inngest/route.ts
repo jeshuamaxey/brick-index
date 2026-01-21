@@ -10,9 +10,10 @@ import { sanitizeJob } from './functions/sanitize-job';
 import { catalogRefreshJob } from './functions/catalog-refresh-job';
 import { reconcileJob } from './functions/reconcile-job';
 import { handleJobCancellation } from './functions/handle-job-cancellation';
+import { runPipelineToCompletion } from './functions/run-pipeline-to-completion';
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [captureJob, materializeListingsJob, enrichJob, analyzeJob, sanitizeJob, catalogRefreshJob, reconcileJob, handleJobCancellation],
+  functions: [captureJob, materializeListingsJob, enrichJob, analyzeJob, sanitizeJob, catalogRefreshJob, reconcileJob, handleJobCancellation, runPipelineToCompletion],
 });
 

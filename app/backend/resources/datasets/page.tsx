@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CopyableId } from '@/components/ui/copyable-id';
 import { PipelineProgress } from '@/components/datasets/pipeline-progress';
-import { Play, ExternalLink } from 'lucide-react';
+import { Play, PlayCircle, ExternalLink } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -232,6 +232,59 @@ export default function DatasetsPage() {
     }
   };
 
+  const handleRunToCompletion = async (dataset: Dataset) => {
+    if (runningJobs.has(dataset.id)) {
+      return;
+    }
+
+    setRunningJobs((prev) => new Set(prev).add(dataset.id));
+
+    try {
+      const response = await fetch(`/api/datasets/${dataset.id}/run-to-completion`, {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast({
+          title: 'Error',
+          description: data.error || 'Failed to trigger pipeline',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Pipeline Started',
+          description: `Running ${data.stagesCount} remaining job(s) to completion. Check the Jobs page for status.`,
+        });
+        // Refresh progress after a short delay
+        setTimeout(() => {
+          fetch(`/api/datasets/${dataset.id}/progress`)
+            .then((res) => res.json())
+            .then((progress) => {
+              setProgressData((prev) => ({
+                ...prev,
+                [dataset.id]: progress,
+              }));
+            })
+            .catch(console.error);
+        }, 1000);
+      }
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to trigger pipeline',
+        variant: 'destructive',
+      });
+    } finally {
+      setRunningJobs((prev) => {
+        const next = new Set(prev);
+        next.delete(dataset.id);
+        return next;
+      });
+    }
+  };
+
   const formatDate = (dateString: string) => {
     try {
       return new Date(dateString).toLocaleDateString('en-US', {
@@ -307,7 +360,7 @@ export default function DatasetsPage() {
                     <TableHead className="w-[100px]">Listings</TableHead>
                     <TableHead className="w-[100px]">Jobs</TableHead>
                     <TableHead className="w-[150px]">Created</TableHead>
-                    <TableHead className="w-[150px]">Actions</TableHead>
+                    <TableHead className="w-[200px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -365,28 +418,49 @@ export default function DatasetsPage() {
                             </span>
                           </TableCell>
                           <TableCell>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() =>
-                                hasRunningJob ? handleCancelRunningJob(dataset) : handleRunNextJob(dataset)
-                              }
-                              disabled={isPendingAction || (!hasNextStage && !hasRunningJob)}
-                              className="h-7 px-2 text-xs"
-                            >
+                            <div className="flex gap-1">
                               {hasRunningJob ? (
-                                <>
-                                  {/* Re-use Play icon for consistency; could be changed to X if desired */}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleCancelRunningJob(dataset)}
+                                  disabled={isPendingAction}
+                                  className="h-7 px-2 text-xs"
+                                >
                                   <Play className="h-3 w-3 mr-1 rotate-90" />
                                   {isPendingAction ? 'Cancelling...' : 'Cancel job'}
-                                </>
+                                </Button>
                               ) : (
                                 <>
-                                  <Play className="h-3 w-3 mr-1" />
-                                  {isPendingAction ? 'Starting...' : hasNextStage ? 'Run Next' : 'Complete'}
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleRunNextJob(dataset)}
+                                    disabled={isPendingAction || !hasNextStage}
+                                    className="h-7 px-2 text-xs"
+                                    title="Run the next job in the pipeline"
+                                  >
+                                    <Play className="h-3 w-3 mr-1" />
+                                    {isPendingAction ? 'Starting...' : hasNextStage ? 'Run Next' : 'Complete'}
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleRunToCompletion(dataset)}
+                                    disabled={isPendingAction || !hasNextStage || !progress.completedStages.includes('ebay_refresh_listings')}
+                                    className="h-7 px-2 text-xs"
+                                    title={
+                                      !progress.completedStages.includes('ebay_refresh_listings')
+                                        ? 'Capture must be complete before running all'
+                                        : 'Run all remaining jobs to completion'
+                                    }
+                                  >
+                                    <PlayCircle className="h-3 w-3 mr-1" />
+                                    Run All
+                                  </Button>
                                 </>
                               )}
-                            </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
