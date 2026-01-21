@@ -4,6 +4,7 @@ import type { Marketplace, Listing } from '@/lib/types';
 import type { MarketplaceAdapter } from './base-adapter';
 import { getEbayAccessToken } from '@/lib/ebay/oauth-token-service';
 import { EbayApiUsageTracker } from '@/lib/ebay/api-usage-tracker';
+import { createServiceLogger, type AppLogger } from '@/lib/logging';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 interface EbayBrowseApiResponse {
@@ -95,8 +96,9 @@ export class EbayAdapter implements MarketplaceAdapter {
   private browseBaseUrl: string;
   private usageTracker: EbayApiUsageTracker | null = null;
   private trackerInitialized: boolean = false;
+  private log: AppLogger;
 
-  constructor(appId: string, oauthToken?: string) {
+  constructor(appId: string, oauthToken?: string, parentLogger?: AppLogger) {
     if (!appId) {
       throw new Error('eBay App ID is required');
     }
@@ -118,6 +120,10 @@ export class EbayAdapter implements MarketplaceAdapter {
     // Default marketplace ID (can be overridden in search params)
     this.defaultMarketplaceId =
       process.env.EBAY_MARKETPLACE_ID || 'EBAY_US';
+    
+    this.log = parentLogger 
+      ? parentLogger.child({ service: 'EbayAdapter' })
+      : createServiceLogger('EbayAdapter');
   }
 
   /**
@@ -135,7 +141,7 @@ export class EbayAdapter implements MarketplaceAdapter {
       this.trackerInitialized = true;
       return this.usageTracker;
     } catch (error) {
-      console.warn('Failed to initialize API usage tracker:', error);
+      this.log.warn({ err: error }, 'Failed to initialize API usage tracker (non-critical)');
       // Don't throw - tracking failures shouldn't break API calls
       this.trackerInitialized = true;
       return null;
@@ -252,7 +258,7 @@ export class EbayAdapter implements MarketplaceAdapter {
     // Track API usage (track before error handling so we record failed calls too)
     // Use fire-and-forget to avoid blocking the API call
     this.trackApiCall(response, 'item_summary_search').catch((err) => {
-      console.warn('Failed to track API usage:', err);
+      this.log.warn({ err }, 'Failed to track API usage (non-critical)');
     });
 
     if (!response.ok) {
@@ -274,7 +280,7 @@ export class EbayAdapter implements MarketplaceAdapter {
 
     // Handle warnings if present
     if (data.warnings && data.warnings.length > 0) {
-      console.warn('eBay API warnings:', data.warnings);
+      this.log.warn({ warnings: data.warnings }, 'eBay API returned warnings');
     }
 
     return data;
@@ -318,9 +324,7 @@ export class EbayAdapter implements MarketplaceAdapter {
         pageCount++;
 
         // Log progress
-        console.log(
-          `Fetched page ${pageCount}: ${items.length} items (offset: ${offset}, total: ${response.total ?? 'unknown'})`
-        );
+        this.log.debug({ pageCount, itemsCount: items.length, offset, total: response.total ?? 'unknown' }, 'Fetched page');
 
         // Add items to collection
         allItems.push(
@@ -356,13 +360,11 @@ export class EbayAdapter implements MarketplaceAdapter {
       // Limit results to maxResults
       const finalItems = allItems.slice(0, maxResults);
 
-      console.log(
-        `Pagination complete: Collected ${finalItems.length} items from ${pageCount} page(s)`
-      );
+      this.log.debug({ itemsCollected: finalItems.length, pageCount }, 'Pagination complete');
 
       return finalItems;
     } catch (error) {
-      console.error('Error fetching eBay listings:', error);
+      this.log.error({ err: error }, 'Error fetching eBay listings');
       throw error;
     }
   }
@@ -477,7 +479,7 @@ export class EbayAdapter implements MarketplaceAdapter {
       // Track API usage (track before error handling so we record failed calls too)
       // Use fire-and-forget to avoid blocking the API call
       this.trackApiCall(response, 'get_item').catch((err) => {
-        console.warn('Failed to track API usage:', err);
+        this.log.warn({ err }, 'Failed to track API usage (non-critical)');
       });
 
       if (!response.ok) {
@@ -504,7 +506,7 @@ export class EbayAdapter implements MarketplaceAdapter {
       return data as Record<string, unknown>;
     } catch (error) {
       if (error instanceof Error) {
-        console.error(`Error fetching eBay item details for ${itemId}:`, error.message);
+        this.log.error({ err: error, itemId }, 'Error fetching eBay item details');
         throw error;
       }
       throw new Error(`Unknown error fetching item details for ${itemId}`);

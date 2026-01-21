@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase/server';
+import { createLoggerForRequest } from '@/lib/logging';
 import type { Database } from '@/lib/supabase/supabase.types';
 
 interface ExtractedIdEntry {
@@ -29,8 +30,11 @@ export async function GET(
   request: NextRequest,
   context: { params: Promise<{ jobId: string }> }
 ) {
+  const log = createLoggerForRequest(request);
+
   try {
     const { jobId } = await context.params;
+    log.info({ jobId }, 'Fetching job details');
 
     // Fetch job
     const { data: job, error: jobError } = await supabaseServer
@@ -126,7 +130,7 @@ export async function GET(
             .in('id', batch);
 
           if (listingsError) {
-            console.error('Error fetching listings batch:', listingsError);
+            log.warn({ err: listingsError }, 'Error fetching listings batch (continuing)');
             // Continue with other batches rather than failing completely
             continue;
           }
@@ -141,7 +145,7 @@ export async function GET(
               .eq('status', 'active');
 
             if (joinsError) {
-              console.error('Error fetching listing_lego_set_joins batch:', joinsError);
+              log.warn({ err: joinsError }, 'Error fetching listing_lego_set_joins batch');
             }
 
             // Build map of listing_id -> lego_set_ids[]
@@ -166,7 +170,7 @@ export async function GET(
                 .in('id', Array.from(legoSetIds));
 
               if (legoSetsError) {
-                console.error('Error fetching lego_sets for joins batch:', legoSetsError);
+                log.warn({ err: legoSetsError }, 'Error fetching lego_sets for joins batch');
               } else {
                 for (const set of legoSetsData || []) {
                   legoSetDetailsMap.set(set.id, {
@@ -223,7 +227,7 @@ export async function GET(
     // For non-reconcile jobs, return standard job data
     return NextResponse.json({ job });
   } catch (error) {
-    console.error('Error fetching job:', error);
+    log.error({ err: error }, 'Error fetching job');
     return NextResponse.json(
       {
         error:

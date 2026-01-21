@@ -1,6 +1,7 @@
 // Service to track eBay Browse API usage for rate limit monitoring
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createServiceLogger, type AppLogger } from '@/lib/logging';
 
 export type EbayEndpointType = 'item_summary_search' | 'get_item';
 
@@ -35,7 +36,13 @@ export interface UsageStats {
  * - get_item: 5,000 calls/day
  */
 export class EbayApiUsageTracker {
-  constructor(private supabase: SupabaseClient) {}
+  private log: AppLogger;
+
+  constructor(private supabase: SupabaseClient, parentLogger?: AppLogger) {
+    this.log = parentLogger 
+      ? parentLogger.child({ service: 'EbayApiUsageTracker' })
+      : createServiceLogger('EbayApiUsageTracker');
+  }
 
   /**
    * Record an API call
@@ -64,11 +71,11 @@ export class EbayApiUsageTracker {
         });
 
       if (error) {
-        console.error('Failed to record API usage:', error);
+        this.log.warn({ err: error, appId: record.app_id, endpointType: record.endpoint_type }, 'Failed to record API usage (non-critical)');
         // Don't throw - we don't want API tracking failures to break API calls
       }
     } catch (error) {
-      console.error('Error recording API usage:', error);
+      this.log.warn({ err: error, appId: record.app_id, endpointType: record.endpoint_type }, 'Error recording API usage (non-critical)');
       // Don't throw - we don't want API tracking failures to break API calls
     }
   }
@@ -89,7 +96,7 @@ export class EbayApiUsageTracker {
       });
 
       if (error) {
-        console.error('Failed to get usage stats:', error);
+        this.log.warn({ err: error, appId }, 'Failed to get usage stats');
         return this.getEmptyStats();
       }
 
@@ -103,7 +110,7 @@ export class EbayApiUsageTracker {
         percentage_used: Number(row.percentage_used) || 0,
       }));
     } catch (error) {
-      console.error('Error getting usage stats:', error);
+      this.log.warn({ err: error, appId }, 'Error getting usage stats');
       return this.getEmptyStats();
     }
   }

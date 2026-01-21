@@ -5,6 +5,7 @@ import { inngest } from '@/lib/inngest/client';
 import { supabaseServer } from '@/lib/supabase/server';
 import { BaseJobService } from '@/lib/jobs/base-job-service';
 import { EbayAdapter } from '@/lib/capture/marketplace-adapters/ebay-adapter';
+import { createJobLogger } from '@/lib/logging';
 import type { JobType } from '@/lib/types';
 import type { Database, Json } from '@/lib/supabase/supabase.types';
 
@@ -29,10 +30,14 @@ export const enrichJob = inngest.createFunction(
   { id: INNGEST_FUNCTION_IDS.ENRICH_JOB },
   { event: 'job/enrich.triggered' },
   async ({ event, step }) => {
+    // Note: Logger creation outside steps, but logging inside steps to avoid duplicates during replay
+    let log = createJobLogger('pending', 'enrich');
+
     const { marketplace, captureJobId, limit, delayMs = 200, datasetId } = event.data;
 
     // Step 1: Get dataset_id from capture job if not provided
     const resolvedDatasetId = await step.run('get-dataset-id', async () => {
+      log.info({ eventData: event.data }, 'Enrich job triggered');
       if (datasetId) {
         return datasetId;
       }
@@ -69,6 +74,7 @@ export const enrichJob = inngest.createFunction(
     });
 
     const jobId = job.id;
+    log = log.child({ jobId, marketplace });
 
     // Step 2: Update progress - querying
     await step.run('update-progress-querying', async () => {
@@ -256,10 +262,7 @@ export const enrichJob = inngest.createFunction(
               rawListingId: rawListing.id,
               error: errorMessage,
             });
-            console.error(
-              `Error enriching raw listing ${rawListing.id}:`,
-              errorMessage
-            );
+            log.warn({ err: error, rawListingId: rawListing.id }, 'Error enriching raw listing (continuing)');
 
             // If this is an "Item not found" error (404), mark the corresponding listing(s) as expired
             // A 404 from eBay Browse API means the item is no longer available for purchase
@@ -283,22 +286,14 @@ export const enrichJob = inngest.createFunction(
                     .eq('marketplace', marketplace);
 
                   if (updateStatusError) {
-                    console.error(
-                      `Failed to update listing status for itemId ${itemId}:`,
-                      updateStatusError
-                    );
+                    log.warn({ err: updateStatusError, itemId }, 'Failed to update listing status');
                   } else {
-                    console.log(
-                      `Marked listing(s) with external_id ${itemId} as expired due to Item not found error`
-                    );
+                    log.info({ itemId }, 'Marked listing(s) as expired due to Item not found error');
                   }
                 }
               } catch (statusUpdateError) {
                 // Log but don't fail the entire batch if status update fails
-                console.error(
-                  `Error updating listing status for raw listing ${rawListing.id}:`,
-                  statusUpdateError
-                );
+                log.warn({ err: statusUpdateError, rawListingId: rawListing.id }, 'Error updating listing status (continuing)');
               }
             }
           }
@@ -348,7 +343,7 @@ export const enrichJob = inngest.createFunction(
         .eq('id', jobId);
 
       if (metadataError) {
-        console.error('Error updating job metadata:', metadataError);
+        log.warn({ err: metadataError }, 'Error updating job metadata');
       }
     });
 

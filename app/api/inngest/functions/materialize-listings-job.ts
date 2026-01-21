@@ -9,6 +9,7 @@ import { DatasetService } from '@/lib/datasets/dataset-service';
 import { EbayAdapter } from '@/lib/capture/marketplace-adapters/ebay-adapter';
 import { EbaySnapshotAdapter } from '@/lib/capture/marketplace-adapters/ebay-snapshot-adapter';
 import { extractEnrichmentFields } from '@/lib/capture/enrichment-utils';
+import { createJobLogger } from '@/lib/logging';
 import type { MarketplaceAdapter } from '@/lib/capture/marketplace-adapters/base-adapter';
 import type { JobType, Listing } from '@/lib/types';
 import type { Json } from '@/lib/supabase/supabase.types';
@@ -66,6 +67,8 @@ export const materializeListingsJob = inngest.createFunction(
   { id: INNGEST_FUNCTION_IDS.MATERIALIZE_LISTINGS_JOB },
   { event: 'job/materialize.triggered' },
   async ({ event, step }) => {
+    // Note: Logger creation outside steps, but logging inside steps to avoid duplicates during replay
+    let log = createJobLogger('pending', 'materialize');
     let jobId: string | null = null;
 
     try {
@@ -73,6 +76,7 @@ export const materializeListingsJob = inngest.createFunction(
 
       // Step 1: Get dataset_id from capture job if not provided
       const resolvedDatasetId = await step.run('get-dataset-id', async () => {
+        log.info({ eventData: event.data }, 'Materialize job triggered');
         if (datasetId) {
           return datasetId;
         }
@@ -104,6 +108,7 @@ export const materializeListingsJob = inngest.createFunction(
       });
 
       jobId = job.id;
+      log = log.child({ jobId, marketplace, captureJobId });
 
       // Step 3: Get raw listing IDs from capture job
       const rawListingIds = await step.run('get-raw-listing-ids', async () => {
@@ -158,7 +163,7 @@ export const materializeListingsJob = inngest.createFunction(
             .in('id', batchIds);
 
           if (fetchError || !rawListings) {
-            console.error('Error fetching raw listings:', fetchError);
+            log.error({ err: fetchError, batch: i }, 'Error fetching raw listings');
             return { new: 0, updated: 0 };
           }
 
@@ -170,7 +175,7 @@ export const materializeListingsJob = inngest.createFunction(
             .in('raw_listing_id', batchIds);
 
           if (detailsError) {
-            console.error('Error fetching raw listing details:', detailsError);
+            log.warn({ err: detailsError, batch: i }, 'Error fetching raw listing details (continuing without enrichment)');
             // Continue without enrichment data rather than failing
           }
 
@@ -234,7 +239,7 @@ export const materializeListingsJob = inngest.createFunction(
 
               transformedListings.push(listing);
             } catch (error) {
-              console.error('Error transforming listing:', error);
+              log.warn({ err: error, rawListingId: rawListing.id }, 'Error transforming listing (skipping)');
             }
           }
 
@@ -317,7 +322,7 @@ export const materializeListingsJob = inngest.createFunction(
                           await datasetService.addListingsToDataset(datasetId, listingIdsForDataset);
                         } catch (datasetError) {
                           // Log but don't fail the job if dataset association fails
-                          console.error('Error adding new listings to dataset:', datasetError);
+                          log.warn({ err: datasetError, datasetId }, 'Error adding new listings to dataset (continuing)');
                         }
                       }
                     }
@@ -331,7 +336,7 @@ export const materializeListingsJob = inngest.createFunction(
                     await datasetService.addListingsToDataset(resolvedDatasetId, newListingIds);
                   } catch (datasetError) {
                     // Log but don't fail the job if dataset association fails
-                    console.error('Error adding new listings to explicit dataset:', datasetError);
+                    log.warn({ err: datasetError, datasetId: resolvedDatasetId }, 'Error adding new listings to explicit dataset (continuing)');
                   }
                 }
               }
@@ -414,7 +419,7 @@ export const materializeListingsJob = inngest.createFunction(
                             await datasetService.addListingsToDataset(datasetId, listingIdsForDataset);
                           } catch (datasetError) {
                             // Log but don't fail the job if dataset association fails
-                            console.error('Error adding existing listings to dataset:', datasetError);
+                            log.warn({ err: datasetError, datasetId }, 'Error adding existing listings to dataset (continuing)');
                           }
                         }
                       }
@@ -429,7 +434,7 @@ export const materializeListingsJob = inngest.createFunction(
                     await datasetService.addListingsToDataset(resolvedDatasetId, existingIdsArray);
                   } catch (datasetError) {
                     // Log but don't fail the job if dataset association fails
-                    console.error('Error adding existing listings to explicit dataset:', datasetError);
+                    log.warn({ err: datasetError, datasetId: resolvedDatasetId }, 'Error adding existing listings to explicit dataset (continuing)');
                   }
                 }
               }
@@ -480,10 +485,7 @@ export const materializeListingsJob = inngest.createFunction(
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const isCritical = isCriticalError(errorMessage);
       
-      console.error('[Materialize Job] Error in materialize job:', errorMessage);
-      if (error instanceof Error && error.stack) {
-        console.error('[Materialize Job] Stack trace:', error.stack);
-      }
+      log.error({ err: error, isCritical }, 'Error in materialize job');
       
       // Mark job as failed if it was created
       if (jobId) {

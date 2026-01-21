@@ -3,20 +3,26 @@
 import { Resend } from 'resend';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/supabase.types';
+import { createServiceLogger, type AppLogger } from '@/lib/logging';
 import type { Search, Listing, ListingAnalysis } from '@/lib/types';
 
 export class EmailService {
   private resend: Resend;
+  private log: AppLogger;
 
   constructor(
     private supabase: SupabaseClient<Database>,
-    apiKey?: string
+    apiKey?: string,
+    parentLogger?: AppLogger
   ) {
     const key = apiKey || process.env.RESEND_API_KEY;
     if (!key) {
       throw new Error('RESEND_API_KEY environment variable is required');
     }
     this.resend = new Resend(key);
+    this.log = parentLogger 
+      ? parentLogger.child({ service: 'EmailService' })
+      : createServiceLogger('EmailService');
   }
 
   /**
@@ -32,7 +38,7 @@ export class EmailService {
     userEmail: string
   ): Promise<boolean> {
     if (!userEmail) {
-      console.error(`User email not provided for search ${search.id}`);
+      this.log.error({ searchId: search.id }, 'User email not provided for search');
       return false;
     }
 
@@ -51,13 +57,13 @@ export class EmailService {
       });
 
       if (error) {
-        console.error('Error sending email:', error);
+        this.log.error({ err: error, searchId: search.id, email }, 'Error sending email');
         return false;
       }
 
       return true;
     } catch (error) {
-      console.error('Exception sending email:', error);
+      this.log.error({ err: error, searchId: search.id, email }, 'Exception sending email');
       return false;
     }
   }

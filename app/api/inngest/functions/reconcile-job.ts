@@ -7,6 +7,7 @@ import { BaseJobService } from '@/lib/jobs/base-job-service';
 import {
   ReconcileService,
 } from '@/lib/analyze/reconcile-service';
+import { createJobLogger } from '@/lib/logging';
 import type { JobType } from '@/lib/types';
 import type { Json } from '@/lib/supabase/supabase.types';
 
@@ -51,6 +52,10 @@ export const reconcileJob = inngest.createFunction(
   { id: INNGEST_FUNCTION_IDS.RECONCILE_JOB },
   { event: 'job/reconcile.triggered' },
   async ({ event, step }) => {
+    // Create logger for this job (will update with actual jobId after creation)
+    // Note: Logger creation must be outside steps, but logging should be inside steps
+    // to avoid duplicate logs during Inngest's step replay
+    let log = createJobLogger('pending', 'reconcile');
     let jobId: string | undefined;
     
     try {
@@ -69,6 +74,8 @@ export const reconcileJob = inngest.createFunction(
 
     // Step 1: Create job record
     const job = await step.run('create-job', async () => {
+      log.info({ eventData: event.data }, 'Reconcile job triggered');
+      
       const jobService = new BaseJobService(supabaseServer);
       const metadata: Record<string, unknown> = {
         listingIds: listingIds || null,
@@ -88,6 +95,8 @@ export const reconcileJob = inngest.createFunction(
     });
 
     const jobId = job.id;
+    // Update logger with actual job ID
+    log = log.child({ jobId });
 
     // Step 2: Initialize reconcile service
     const reconcileService = new ReconcileService(supabaseServer);
@@ -185,11 +194,11 @@ export const reconcileJob = inngest.createFunction(
         const { data: listings, error: listingsError } = await query;
 
         if (listingsError) {
-          console.error('[Reconcile Job] Error fetching listings:', listingsError);
+          log.error({ err: listingsError }, 'Error fetching listings');
           const errorMessage = `Failed to fetch listings: ${listingsError.message}`;
           // Check if this is a critical error
           if (isCriticalError(listingsError.message)) {
-            console.error('[Reconcile Job] CRITICAL ERROR detected while fetching listings - will fail job');
+            log.error({ err: listingsError }, 'CRITICAL ERROR detected while fetching listings - will fail job');
             throw new Error(errorMessage);
           }
           throw new Error(errorMessage);
@@ -353,21 +362,14 @@ export const reconcileJob = inngest.createFunction(
             const isCritical = isCriticalError(errorMessage);
             
             if (isCritical) {
-              console.error(`[Reconcile Job] Batch ${i + 1}: CRITICAL ERROR detected - will fail entire job`);
-              console.error(`[Reconcile Job] Critical error message:`, errorMessage);
-              if (error instanceof Error && error.stack) {
-                console.error(`[Reconcile Job] Stack trace:`, error.stack);
-              }
+              log.error({ err: error, batch: i + 1, listingId }, 'CRITICAL ERROR detected - will fail entire job');
               // Re-throw critical errors to fail the entire job
               throw error;
             }
             
             // Non-critical error - mark this listing as failed but continue
             batchStats.failed++;
-            console.error(`[Reconcile Job] Batch ${i + 1}: Error reconciling listing ${listingId}:`, errorMessage);
-            if (error instanceof Error && error.stack) {
-              console.error(`[Reconcile Job] Batch ${i + 1}: Stack trace:`, error.stack);
-            }
+            log.warn({ err: error, batch: i + 1, listingId }, 'Error reconciling listing (continuing)');
             batchStats.errors.push({
               listingId,
               error: errorMessage,
@@ -528,10 +530,7 @@ export const reconcileJob = inngest.createFunction(
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const isCritical = isCriticalError(errorMessage);
       
-      console.error('[Reconcile Job] Error in reconcile job:', errorMessage);
-      if (error instanceof Error && error.stack) {
-        console.error('[Reconcile Job] Stack trace:', error.stack);
-      }
+      log.error({ err: error, isCritical }, 'Error in reconcile job');
       
       // Mark job as failed if it was created
       if (jobId) {

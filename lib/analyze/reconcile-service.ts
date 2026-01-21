@@ -5,6 +5,7 @@ import type { Database } from '@/lib/supabase/supabase.types';
 import { TextExtractor } from './text-extractor';
 import { LegoSetValidator, type ValidatedSetInfo } from './lego-set-validator';
 import { LegoSetJoinsService } from './lego-set-joins-service';
+import { createServiceLogger, type AppLogger } from '@/lib/logging';
 
 export interface ProcessingResult {
   extracted: number;
@@ -19,11 +20,15 @@ export class ReconcileService {
   private textExtractor: TextExtractor;
   private validator: LegoSetValidator;
   private joinsService: LegoSetJoinsService;
+  private log: AppLogger;
 
-  constructor(private supabase: SupabaseClient<Database>) {
+  constructor(private supabase: SupabaseClient<Database>, parentLogger?: AppLogger) {
     this.textExtractor = new TextExtractor();
     this.validator = new LegoSetValidator(supabase);
     this.joinsService = new LegoSetJoinsService(supabase);
+    this.log = parentLogger 
+      ? parentLogger.child({ service: 'ReconcileService' })
+      : createServiceLogger('ReconcileService');
   }
 
   /**
@@ -55,7 +60,7 @@ export class ReconcileService {
       .single();
 
     if (listingError || !listing) {
-      console.error(`[ReconcileService] Error fetching listing ${listingId}:`, listingError);
+      this.log.error({ err: listingError, listingId }, 'Error fetching listing');
       throw new Error(
         `Listing not found: ${listingError?.message || 'Unknown error'}`
       );
@@ -84,7 +89,7 @@ export class ReconcileService {
       .eq('id', listingId);
 
     if (updateError) {
-      console.error(`[ReconcileService] Error marking listing ${listingId} as reconciled:`, updateError);
+      this.log.error({ err: updateError, listingId }, 'Error marking listing as reconciled');
       throw new Error(
         `Failed to mark listing as reconciled: ${updateError.message}`
       );
@@ -141,7 +146,7 @@ export class ReconcileService {
         cleanupMode
       );
     } catch (error) {
-      console.error(`[ReconcileService] Error creating join records:`, error);
+      this.log.error({ err: error, listingId }, 'Error creating join records');
       throw error;
     }
 
@@ -186,7 +191,7 @@ export class ReconcileService {
         result.joinsCreated += stats.joinsCreated;
       } catch (error) {
         // Log error but continue processing other listings
-        console.error(`Error processing listing ${listingId}:`, error);
+        this.log.warn({ err: error, listingId }, 'Error processing listing (continuing)');
       }
     }
 

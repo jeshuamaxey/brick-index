@@ -6,6 +6,7 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { BaseJobService } from '@/lib/jobs/base-job-service';
 import { EbayAdapter, type EbaySearchParams } from '@/lib/capture/marketplace-adapters/ebay-adapter';
 import { getEbayAccessToken } from '@/lib/ebay/oauth-token-service';
+import { createJobLogger } from '@/lib/logging';
 import type { JobType } from '@/lib/types';
 import type { Json } from '@/lib/supabase/supabase.types';
 
@@ -15,6 +16,8 @@ export const captureJob = inngest.createFunction(
   { id: INNGEST_FUNCTION_IDS.CAPTURE_JOB },
   { event: 'job/capture.triggered' },
   async ({ event, step }) => {
+    // Note: Logger creation outside steps, but logging inside steps to avoid duplicates during replay
+    let log = createJobLogger('pending', 'capture');
     let jobId: string | null = null;
 
     try {
@@ -22,6 +25,7 @@ export const captureJob = inngest.createFunction(
 
       // Step 1: Create job record
       const job = await step.run('create-job', async () => {
+        log.info({ eventData: event.data }, 'Capture job triggered');
         const jobService = new BaseJobService(supabaseServer);
         const jobType: JobType = `${marketplace}_refresh_listings` as JobType;
         const metadata: Record<string, unknown> = {
@@ -41,6 +45,7 @@ export const captureJob = inngest.createFunction(
       });
 
       jobId = job.id;
+      log = log.child({ jobId, marketplace });
 
       // Step 2: Update progress - searching
       await step.run('update-progress-searching', async () => {
@@ -138,7 +143,7 @@ export const captureJob = inngest.createFunction(
               .single();
 
             if (rawError) {
-              console.error('Error storing raw listing:', rawError);
+              log.warn({ err: rawError }, 'Error storing raw listing (continuing)');
               continue;
             }
 
@@ -203,7 +208,7 @@ export const captureJob = inngest.createFunction(
             await datasetService.addRawListingsToDataset(datasetId, rawListingIds);
           } catch (error) {
             // Log but don't fail the job if dataset association fails
-            console.error('Error associating raw_listings with dataset:', error);
+            log.warn({ err: error, datasetId }, 'Error associating raw_listings with dataset (continuing)');
           }
         });
       }
@@ -227,6 +232,8 @@ export const captureJob = inngest.createFunction(
         raw_listings_stored: listingsFound,
       };
     } catch (error) {
+      log.error({ err: error }, 'Error in capture job');
+      
       // Mark job as failed if it was created
       if (jobId) {
         await step.run('fail-job', async () => {

@@ -5,6 +5,7 @@ import { inngest } from '@/lib/inngest/client';
 import { supabaseServer } from '@/lib/supabase/server';
 import { BaseJobService } from '@/lib/jobs/base-job-service';
 import { SanitizationService } from '@/lib/capture/sanitization-service';
+import { createJobLogger } from '@/lib/logging';
 import type { JobType, Listing } from '@/lib/types';
 
 const BATCH_SIZE = 50; // Process 50 items per step to avoid timeout
@@ -23,6 +24,8 @@ export const sanitizeJob = inngest.createFunction(
   { id: INNGEST_FUNCTION_IDS.SANITIZE_JOB },
   { event: 'job/sanitize.triggered' },
   async ({ event, step }) => {
+    // Note: Logger creation outside steps, but logging inside steps to avoid duplicates during replay
+    let log = createJobLogger('pending', 'sanitize');
     let jobId: string | null = null;
 
     try {
@@ -30,6 +33,7 @@ export const sanitizeJob = inngest.createFunction(
 
       // Step 1: Create job record
       const job = await step.run('create-job', async () => {
+        log.info({ eventData: event.data }, 'Sanitize job triggered');
         const jobService = new BaseJobService(supabaseServer);
         const metadata: Record<string, unknown> = {
           listingIds: listingIds || null,
@@ -45,6 +49,7 @@ export const sanitizeJob = inngest.createFunction(
       });
 
       jobId = job.id;
+      log = log.child({ jobId });
 
       // Step 2: Update progress - querying
       await step.run('update-progress-querying', async () => {
@@ -164,19 +169,13 @@ export const sanitizeJob = inngest.createFunction(
                 .eq('id', listing.id);
 
               if (updateError) {
-                console.error(
-                  `Error updating listing ${listing.id}:`,
-                  updateError
-                );
+                log.warn({ err: updateError, listingId: listing.id }, 'Error updating listing (continuing)');
                 continue;
               }
 
               batchUpdated++;
             } catch (error) {
-              console.error(
-                `Error sanitizing listing ${listing.id}:`,
-                error
-              );
+              log.warn({ err: error, listingId: listing.id }, 'Error sanitizing listing (continuing)');
               // Continue processing other listings
             }
           }
@@ -218,6 +217,8 @@ export const sanitizeJob = inngest.createFunction(
         listings_updated: listingsUpdated,
       };
     } catch (error) {
+      log.error({ err: error }, 'Error in sanitize job');
+      
       // Mark job as failed if it was created
       if (jobId) {
         await step.run('fail-job', async () => {
