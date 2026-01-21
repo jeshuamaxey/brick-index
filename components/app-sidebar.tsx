@@ -45,6 +45,10 @@ const data = {
           title: "Datasets",
           url: "/backend/resources/datasets",
         },
+        {
+          title: "Publishing",
+          url: "/backend/resources/publishing",
+        },
       ],
     },
     {
