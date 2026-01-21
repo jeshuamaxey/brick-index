@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect, FormEvent, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,7 @@ const isDevelopment = process.env.NODE_ENV === 'development';
 const DEV_EMAIL = 'admin@example.com';
 const DEV_PASSWORD = 'password';
 
-export default function SignInPage() {
+function SignInForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState(isDevelopment ? DEV_EMAIL : '');
@@ -120,5 +120,22 @@ export default function SignInPage() {
         </Link>
       </div>
     </div>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={
+      <div className="w-full space-y-6">
+        <div className="text-center">
+          <h2 className="text-3xl font-bold">Sign In</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Loading...
+          </p>
+        </div>
+      </div>
+    }>
+      <SignInForm />
+    </Suspense>
   );
 }
