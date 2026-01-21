@@ -95,6 +95,7 @@ export class PriceAggregationService {
 
     const result = new Map<string, PriceAggregate>();
     for (const row of data || []) {
+      if (!row.lego_set_id) continue; // Skip rows without a set ID
       result.set(row.lego_set_id, {
         avgPrice: row.avg_price ?? 0,
         medianPrice: row.median_price,
