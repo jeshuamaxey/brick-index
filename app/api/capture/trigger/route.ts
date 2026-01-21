@@ -102,20 +102,50 @@ export async function POST(request: NextRequest) {
         datasetName.trim()
       );
       datasetId = dataset.id;
+      
+      // Ensure datasetId is set - if dataset creation succeeded, this should always be truthy
+      if (!datasetId) {
+        return NextResponse.json(
+          { error: 'Failed to create or retrieve dataset' },
+          { status: 500 }
+        );
+      }
     }
 
     // Send Inngest event to trigger capture job
+    // Build event data object, ensuring datasetId is included when datasetName is provided
+    const eventData: {
+      marketplace: string;
+      keywords: string[];
+      ebayParams?: EbaySearchParams;
+      datasetName?: string;
+      datasetId?: string;
+      userId?: string;
+    } = {
+      marketplace,
+      keywords,
+    };
     
+    if (ebayParams && Object.keys(ebayParams).length > 0) {
+      eventData.ebayParams = ebayParams;
+    }
+    if (datasetName) {
+      eventData.datasetName = datasetName.trim();
+      // If datasetName is provided, datasetId MUST be set (we validated it above)
+      // Always include it to ensure it's passed to the job
+      if (!datasetId) {
+        // This should never happen due to validation above, but throw error if it does
+        throw new Error('Critical error: datasetName provided but datasetId is not set after dataset creation');
+      }
+      eventData.datasetId = datasetId;
+    }
+    if (userId) {
+      eventData.userId = userId;
+    }
+
     await inngest.send({
       name: 'job/capture.triggered',
-      data: {
-        marketplace,
-        keywords,
-        ebayParams,
-        datasetName: datasetName?.trim(),
-        datasetId,
-        userId,
-      },
+      data: eventData,
     });
 
     // Return immediately - job will be processed asynchronously by Inngest

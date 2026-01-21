@@ -9,9 +9,11 @@ export async function POST(request: NextRequest) {
     const {
       captureJobId,
       marketplace,
+      datasetId,
     }: {
       captureJobId: string;
       marketplace: string;
+      datasetId?: string;
     } = body;
 
     if (!captureJobId) {
@@ -34,6 +36,7 @@ export async function POST(request: NextRequest) {
       data: {
         captureJobId,
         marketplace,
+        datasetId,
       },
     });
 

@@ -71,17 +71,17 @@ export const materializeListingsJob = inngest.createFunction(
     try {
       const { captureJobId, marketplace, datasetId } = event.data;
 
-      // Step 1: Get dataset_id from capture job metadata if not provided
+      // Step 1: Get dataset_id from capture job if not provided
       const resolvedDatasetId = await step.run('get-dataset-id', async () => {
         if (datasetId) {
           return datasetId;
         }
         
-        // Try to get from capture job metadata
+        // Try to get from capture job's dataset_id column
         const { data: captureJob, error } = await supabaseServer
           .schema('pipeline')
           .from('jobs')
-          .select('metadata')
+          .select('dataset_id')
           .eq('id', captureJobId)
           .single();
         
@@ -89,8 +89,7 @@ export const materializeListingsJob = inngest.createFunction(
           return null;
         }
         
-        const metadata = captureJob.metadata as Record<string, unknown> | null;
-        return metadata?.dataset_id as string | undefined || null;
+        return (captureJob as { dataset_id: string | null }).dataset_id || null;
       });
 
       // Step 2: Create materialize job record
@@ -101,11 +100,7 @@ export const materializeListingsJob = inngest.createFunction(
           captureJobId,
         };
         
-        if (resolvedDatasetId) {
-          metadata.dataset_id = resolvedDatasetId;
-        }
-        
-        return await jobService.createJob(jobType, marketplace, metadata);
+        return await jobService.createJob(jobType, marketplace, metadata, resolvedDatasetId);
       });
 
       jobId = job.id;

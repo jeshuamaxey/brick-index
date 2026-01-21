@@ -35,14 +35,11 @@ export const analyzeJob = inngest.createFunction(
         limit: limit || null,
       };
       
-      if (datasetId) {
-        metadata.dataset_id = datasetId;
-      }
-      
       return await jobService.createJob(
         'analyze_listings' as JobType,
         'all', // Marketplace doesn't really apply to analysis
-        metadata
+        metadata,
+        datasetId
       );
     });
 

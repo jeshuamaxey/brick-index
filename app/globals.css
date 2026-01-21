@@ -165,3 +165,18 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes shimmer {
+  0%, 100% {
+    background-position: -200% 0;
+  }
+  50% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer-animation {
+  background: linear-gradient(90deg, transparent, rgba(234, 179, 8, 0.3), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2s ease-in-out infinite;
+}

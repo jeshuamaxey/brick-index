@@ -3,9 +3,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, Copy, X, Search } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Sheet,
   SheetContent,
@@ -38,12 +46,24 @@ interface Job {
   last_update: string | null;
   error_message: string | null;
   metadata?: Record<string, unknown>;
+  dataset_id?: string | null;
+  dataset?: { id: string; name: string } | null;
+}
+
+interface Dataset {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 const PAGE_SIZE = 50;
 
 export default function JobsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const datasetId = searchParams.get('dataset_id');
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +71,8 @@ export default function JobsPage() {
   const [total, setTotal] = useState(0);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [loadingDatasets, setLoadingDatasets] = useState(false);
 
   const fetchJobs = async (silent = false, currentPage = page) => {
     try {
@@ -59,7 +81,14 @@ export default function JobsPage() {
       }
       setError(null);
       const offset = currentPage * PAGE_SIZE;
-      const response = await fetch(`/api/jobs?limit=${PAGE_SIZE}&offset=${offset}`);
+      const params = new URLSearchParams({
+        limit: PAGE_SIZE.toString(),
+        offset: offset.toString(),
+      });
+      if (datasetId) {
+        params.append('dataset_id', datasetId);
+      }
+      const response = await fetch(`/api/jobs?${params.toString()}`);
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || 'Failed to fetch jobs');
@@ -77,6 +106,26 @@ export default function JobsPage() {
     }
   };
 
+  // Fetch datasets on mount
+  useEffect(() => {
+    const fetchDatasets = async () => {
+      setLoadingDatasets(true);
+      try {
+        const response = await fetch('/api/datasets');
+        if (response.ok) {
+          const data = await response.json();
+          setDatasets(data || []);
+        }
+      } catch (error) {
+        console.error('Error fetching datasets:', error);
+      } finally {
+        setLoadingDatasets(false);
+      }
+    };
+
+    fetchDatasets();
+  }, []);
+
   useEffect(() => {
     // Initial fetch
     fetchJobs(false, page);
@@ -92,7 +141,25 @@ export default function JobsPage() {
     return () => {
       clearInterval(pollInterval);
     };
-  }, [page]); // Re-fetch when page changes
+  }, [page, datasetId]); // Re-fetch when page or dataset_id changes
+
+  const handleDatasetFilterChange = (value: string) => {
+    const params = new URLSearchParams();
+    
+    // Only add dataset_id if it's not 'all'
+    if (value && value !== 'all') {
+      params.set('dataset_id', value);
+    }
+    
+    // Reset to first page when changing filter
+    setPage(0);
+    
+    // Update URL - if params is empty, just use the base path
+    const newUrl = params.toString() 
+      ? `/backend/resources/jobs?${params.toString()}`
+      : '/backend/resources/jobs';
+    router.push(newUrl);
+  };
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'N/A';
@@ -175,8 +242,38 @@ export default function JobsPage() {
     <div className="flex flex-col h-full bg-background text-foreground p-4">
       {/* Header section - fixed */}
       <div className="flex items-center justify-between mb-4 shrink-0">
-        <h1 className="text-2xl font-bold text-foreground">Jobs</h1>
         <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-foreground">Jobs</h1>
+        </div>
+        <div className="flex items-center gap-3">
+          {/* Dataset filter */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-foreground/70 whitespace-nowrap">
+              Dataset:
+            </label>
+            <Select
+              value={datasetId || 'all'}
+              onValueChange={handleDatasetFilterChange}
+            >
+              <SelectTrigger size="sm" className="w-[200px]">
+                <SelectValue placeholder="All datasets" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All datasets</SelectItem>
+                {loadingDatasets ? (
+                  <SelectItem value="loading" disabled>
+                    Loading...
+                  </SelectItem>
+                ) : (
+                  datasets.map((dataset) => (
+                    <SelectItem key={dataset.id} value={dataset.id}>
+                      {dataset.name}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
           {hasRunningJobs && (
             <>
               <span className="text-xs text-foreground/60 flex items-center gap-2">
@@ -245,8 +342,8 @@ export default function JobsPage() {
                       <DataTableHeaderCell className="px-2 py-2 text-xs uppercase tracking-wider w-40">
                         Progress
                       </DataTableHeaderCell>
-                      <DataTableHeaderCell className="px-2 py-2 text-xs uppercase tracking-wider w-40">
-                        Timestamps
+                      <DataTableHeaderCell className="px-2 py-2 text-xs uppercase tracking-wider w-32">
+                        Dataset
                       </DataTableHeaderCell>
                       <DataTableHeaderCell className="px-2 py-2 text-xs uppercase tracking-wider w-20">
                         Actions
@@ -306,13 +403,18 @@ export default function JobsPage() {
                               <span className="text-foreground/40">—</span>
                             )}
                           </DataTableCell>
-                          <DataTableCell className="px-2 py-2 text-xs text-foreground/70">
-                            <div className="space-y-0.5 text-xs leading-tight">
-                              <div>Started: {formatDate(job.started_at)}</div>
-                              {job.completed_at && (
-                                <div>Completed: {formatDate(job.completed_at)}</div>
-                              )}
-                            </div>
+                          <DataTableCell className="px-2 py-2 text-xs">
+                            {job.dataset ? (
+                              <Link
+                                href="/backend/resources/datasets"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-primary hover:text-primary/80 hover:underline"
+                              >
+                                {job.dataset.name}
+                              </Link>
+                            ) : (
+                              <span className="text-foreground/40">—</span>
+                            )}
                           </DataTableCell>
                           <DataTableCell className="px-2 py-2 text-xs">
                             <div className="flex items-center gap-1">

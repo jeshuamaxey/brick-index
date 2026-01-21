@@ -98,6 +98,12 @@ All data related to user-facing features:
 - `GET /api/listings/search` - Search listings
 - `GET /api/listings/[id]` - Get listing details
 
+### Datasets
+
+- `GET /api/datasets` - List datasets for the authenticated user
+- `GET /api/datasets/[datasetId]/progress` - Get pipeline progress and job statuses for a dataset
+- `POST /api/datasets/[datasetId]/run-next-job` - Trigger the next pending pipeline job for a dataset
+
 ### Discover
 
 - `POST /api/discover/notify` - Process notifications (matching and email)
@@ -118,6 +124,7 @@ Access dev pages at:
 
 - `/backend/resources` - Pipeline overview with data visualization (Capture, Materialise, Enrich metrics and bar chart)
 - `/backend/resources/jobs` - View all jobs and their status
+- `/backend/resources/datasets` - View and manage datasets and their pipeline progress
 - `/backend/resources/listings` - View captured listings
 - `/backend/resources/api-usage` - View API usage tracking
 - `/backend/resources/catalog` - View LEGO catalog data
