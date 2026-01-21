@@ -4,6 +4,7 @@
 import { inngest } from '@/lib/inngest/client';
 import { supabaseServer } from '@/lib/supabase/server';
 import { BaseJobService } from '@/lib/jobs/base-job-service';
+import { createJobLogger } from '@/lib/logging';
 import { FUNCTION_TO_JOB_TYPE, extractFunctionName, INNGEST_FUNCTION_IDS } from './registry';
 import type { JobType } from '@/lib/types';
 import type { Database } from '@/lib/supabase/supabase.types';
@@ -12,7 +13,10 @@ export const handleJobCancellation = inngest.createFunction(
   { id: INNGEST_FUNCTION_IDS.HANDLE_JOB_CANCELLATION },
   { event: 'inngest/function.cancelled' },
   async ({ event, step }) => {
+    const log = createJobLogger('cancellation-handler', 'handle-cancellation');
     const { function_id, event: originalEvent, run_id } = event.data;
+
+    log.info({ function_id, run_id }, 'Handling job cancellation event');
 
     await step.run('update-cancelled-job', async () => {
       const jobService = new BaseJobService(supabaseServer);
@@ -20,14 +24,14 @@ export const handleJobCancellation = inngest.createFunction(
       // Extract function name from full function_id (remove app ID prefix)
       const functionName = extractFunctionName(function_id);
       if (!functionName) {
-        console.warn(`Could not extract function name from function_id: ${function_id}`);
+        log.warn({ function_id }, 'Could not extract function name from function_id');
         return;
       }
 
       // Get job type from function name
       const jobType = FUNCTION_TO_JOB_TYPE[functionName];
       if (!jobType) {
-        console.warn(`Unknown function name: ${functionName} (from function_id: ${function_id}), skipping cancellation update`);
+        log.warn({ functionName, function_id }, 'Unknown function name, skipping cancellation update');
         return;
       }
 
@@ -86,11 +90,9 @@ export const handleJobCancellation = inngest.createFunction(
 
       if (jobId) {
         await jobService.failJob(jobId, 'Job cancelled via Inngest UI');
-        console.log(`Marked job ${jobId} as cancelled (function: ${functionName}, function_id: ${function_id}, run_id: ${run_id})`);
+        log.info({ jobId, functionName, function_id, run_id }, 'Marked job as cancelled');
       } else {
-        console.warn(
-          `Could not find running job to cancel for function: ${functionName} (function_id: ${function_id}), run_id: ${run_id}`
-        );
+        log.warn({ functionName, function_id, run_id }, 'Could not find running job to cancel');
       }
     });
   }

@@ -4,7 +4,10 @@
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { supabaseServer } from '@/lib/supabase/server';
+import { createServiceLogger } from '@/lib/logging';
 import type { Database } from '@/lib/supabase/supabase.types';
+
+const log = createServiceLogger('AuthHelpers');
 
 /**
  * Get the authenticated user session from the server
@@ -70,13 +73,13 @@ export async function hasPermission(
     });
 
     if (error) {
-      console.error('Error checking permission:', error);
+      log.warn({ err: error, userId, permission }, 'Error checking permission');
       return false;
     }
 
     return data === true;
   } catch (error) {
-    console.error('Error checking permission:', error);
+    log.warn({ err: error, userId, permission }, 'Error checking permission');
     return false;
   }
 }
@@ -105,13 +108,13 @@ export async function getUserGroups(userId: string) {
     });
 
     if (error) {
-      console.error('Error getting user groups:', error);
+      log.warn({ err: error, userId }, 'Error getting user groups');
       return [];
     }
 
     return data || [];
   } catch (error) {
-    console.error('Error getting user groups:', error);
+    log.warn({ err: error, userId }, 'Error getting user groups');
     return [];
   }
 }
@@ -126,7 +129,7 @@ export async function getUserPermissions(userId: string): Promise<string[]> {
     });
 
     if (error) {
-      console.error('Error getting user permissions:', error);
+      log.warn({ err: error, userId }, 'Error getting user permissions');
       return [];
     }
 
@@ -136,7 +139,7 @@ export async function getUserPermissions(userId: string): Promise<string[]> {
     }
     return [];
   } catch (error) {
-    console.error('Error getting user permissions:', error);
+    log.warn({ err: error, userId }, 'Error getting user permissions');
     return [];
   }
 }
@@ -155,13 +158,13 @@ export async function isUserInGroup(
     });
 
     if (error) {
-      console.error('Error checking group membership:', error);
+      log.warn({ err: error, userId, groupId }, 'Error checking group membership');
       return false;
     }
 
     return data === true;
   } catch (error) {
-    console.error('Error checking group membership:', error);
+    log.warn({ err: error, userId, groupId }, 'Error checking group membership');
     return false;
   }
 }

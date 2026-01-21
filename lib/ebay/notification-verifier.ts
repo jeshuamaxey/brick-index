@@ -1,7 +1,11 @@
+import { createServiceLogger } from '@/lib/logging';
+
 export type EbayEnvironment = 'PRODUCTION' | 'SANDBOX';
 
 // Minimal shape used by our verifier; we only care that it's an object.
 export type EbayNotificationConfig = Record<string, unknown>;
+
+const log = createServiceLogger('EbayNotificationVerifier');
 
 /**
  * Lightweight, swappable implementation of the eBay notification "process" logic.
@@ -26,23 +30,15 @@ export async function processEbayNotification(
   environment: EbayEnvironment,
 ): Promise<number> {
   try {
-    console.info('[eBay Deletion][CustomVerifier] process called', {
-      hasBody: Boolean(body),
-      hasSignature: Boolean(signature),
-      environment,
-    });
+    log.info({ hasBody: Boolean(body), hasSignature: Boolean(signature), environment }, 'Processing eBay notification');
 
     if (!signature) {
-      console.warn(
-        '[eBay Deletion][CustomVerifier] Missing X-EBAY-SIGNATURE header; returning 412',
-      );
+      log.warn('Missing X-EBAY-SIGNATURE header; returning 412');
       return 412;
     }
 
     if (!body || typeof body !== 'object') {
-      console.error(
-        '[eBay Deletion][CustomVerifier] Invalid or empty payload; returning 412',
-      );
+      log.error('Invalid or empty payload; returning 412');
       return 412;
     }
 
@@ -56,15 +52,10 @@ export async function processEbayNotification(
     // For now, we optimistically treat a well-formed payload with a present signature
     // as "verified" so we can test end-to-end behavior independently of the SDK.
 
-    console.info(
-      '[eBay Deletion][CustomVerifier] Basic checks passed; returning 204 (temporary optimistic verification)',
-    );
+    log.info('Basic checks passed; returning 204 (temporary optimistic verification)');
     return 204;
   } catch (error) {
-    console.error(
-      '[eBay Deletion][CustomVerifier] Unexpected error during notification processing:',
-      error,
-    );
+    log.error({ err: error }, 'Unexpected error during notification processing');
     return 500;
   }
 }

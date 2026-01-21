@@ -6,6 +6,7 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { BaseJobService } from '@/lib/jobs/base-job-service';
 import { EbayAdapter, type EbaySearchParams } from '@/lib/capture/marketplace-adapters/ebay-adapter';
 import { getEbayAccessToken } from '@/lib/ebay/oauth-token-service';
+import { createJobLogger } from '@/lib/logging';
 import type { JobType } from '@/lib/types';
 import type { Json } from '@/lib/supabase/supabase.types';
 
@@ -33,6 +34,8 @@ export const captureJob = inngest.createFunction(
   { id: INNGEST_FUNCTION_IDS.CAPTURE_JOB },
   { event: 'job/capture.triggered' },
   async ({ event, step }) => {
+    // Note: Logger creation outside steps, but logging inside steps to avoid duplicates during replay
+    let log = createJobLogger('pending', 'capture');
     let jobId: string | null = null;
     const startTime = Date.now();
 
@@ -50,6 +53,7 @@ export const captureJob = inngest.createFunction(
 
       // Step 1: Create job record
       const job = await step.run('create-job', async () => {
+        log.info({ eventData: event.data }, 'Capture job triggered');
         const jobService = new BaseJobService(supabaseServer);
         const jobType: JobType = `${marketplace}_refresh_listings` as JobType;
         const metadata: Record<string, unknown> = {
@@ -71,6 +75,7 @@ export const captureJob = inngest.createFunction(
       });
 
       jobId = job.id;
+      log = log.child({ jobId, marketplace });
 
       // Step 2: Update progress - searching
       await step.run('update-progress-searching', async () => {
@@ -286,7 +291,7 @@ export const captureJob = inngest.createFunction(
             log.info('Dataset association complete', { jobId, datasetId });
           } catch (error) {
             // Log but don't fail the job if dataset association fails
-            log.error('Failed to associate raw_listings with dataset', error, { jobId, datasetId });
+            log.warn({ err: error, datasetId }, 'Error associating raw_listings with dataset (continuing)');
           }
         });
       }

@@ -4,17 +4,22 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/supabase.types';
 import { MatchingService } from './matching-service';
 import { EmailService } from './email-service';
+import { createServiceLogger, type AppLogger } from '@/lib/logging';
 import type { Listing, ListingAnalysis } from '@/lib/types';
 
 export class NotificationService {
   private matchingService: MatchingService;
   private emailService: EmailService;
   private supabase: SupabaseClient<Database>;
+  private log: AppLogger;
 
-  constructor(supabase: SupabaseClient<Database>, resendApiKey?: string) {
+  constructor(supabase: SupabaseClient<Database>, resendApiKey?: string, parentLogger?: AppLogger) {
     this.supabase = supabase;
     this.matchingService = new MatchingService(supabase);
     this.emailService = new EmailService(supabase, resendApiKey);
+    this.log = parentLogger 
+      ? parentLogger.child({ service: 'NotificationService' })
+      : createServiceLogger('NotificationService');
   }
 
   /**
@@ -60,15 +65,12 @@ export class NotificationService {
         }
       } catch (error) {
         // If admin API is not available, we can't send emails
-        console.warn(
-          `Cannot get user email for search ${searchId}:`,
-          error
-        );
+        this.log.warn({ err: error, searchId }, 'Cannot get user email for search');
         continue;
       }
 
       if (!userEmail) {
-        console.warn(`User email not available for search ${searchId}`);
+        this.log.warn({ searchId }, 'User email not available for search');
         continue;
       }
 

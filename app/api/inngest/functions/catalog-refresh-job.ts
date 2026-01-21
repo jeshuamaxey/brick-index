@@ -5,6 +5,7 @@ import { inngest } from '@/lib/inngest/client';
 import { supabaseServer } from '@/lib/supabase/server';
 import { BaseJobService } from '@/lib/jobs/base-job-service';
 import { LegoCatalogService } from '@/lib/catalog/lego-catalog-service';
+import { createJobLogger } from '@/lib/logging';
 import type { JobType } from '@/lib/types';
 import type { Json } from '@/lib/supabase/supabase.types';
 
@@ -23,11 +24,14 @@ export const catalogRefreshJob = inngest.createFunction(
   { id: INNGEST_FUNCTION_IDS.CATALOG_REFRESH_JOB },
   { event: 'job/catalog-refresh.triggered' },
   async ({ event, step }) => {
+    // Note: Logger creation outside steps, but logging inside steps to avoid duplicates during replay
+    let log = createJobLogger('pending', 'catalog-refresh');
     let jobId: string | null = null;
 
     try {
       // Step 1: Create job record (or use existing if jobId provided)
       const job = await step.run('create-job', async () => {
+        log.info({ eventData: event.data }, 'Catalog refresh job triggered');
         // If jobId is provided, fetch the existing job instead of creating a new one
         if (event.data.jobId) {
           const { data: existingJob, error } = await supabaseServer
@@ -58,6 +62,7 @@ export const catalogRefreshJob = inngest.createFunction(
       });
 
       jobId = job.id;
+      log = log.child({ jobId });
 
       // Step 2: Update progress - starting
       await step.run('update-progress-starting', async () => {
@@ -292,6 +297,8 @@ export const catalogRefreshJob = inngest.createFunction(
         setsUpdated: totalSetsUpdated,
       };
     } catch (error) {
+      log.error({ err: error }, 'Error in catalog refresh job');
+      
       // Mark job as failed if it was created
       if (jobId) {
         await step.run('fail-job', async () => {

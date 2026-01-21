@@ -82,7 +82,6 @@ export type Database = {
           last_modified: string | null
           name: string
           num_parts: number | null
-          publish_override: boolean | null
           set_img_url: string | null
           set_num: string
           set_url: string | null
@@ -96,7 +95,6 @@ export type Database = {
           last_modified?: string | null
           name: string
           num_parts?: number | null
-          publish_override?: boolean | null
           set_img_url?: string | null
           set_num: string
           set_url?: string | null
@@ -110,7 +108,6 @@ export type Database = {
           last_modified?: string | null
           name?: string
           num_parts?: number | null
-          publish_override?: boolean | null
           set_img_url?: string | null
           set_num?: string
           set_url?: string | null
@@ -119,41 +116,6 @@ export type Database = {
           year?: number | null
         }
         Relationships: []
-      }
-      published_themes: {
-        Row: {
-          created_at: string | null
-          id: string
-          is_published: boolean
-          published_at: string | null
-          theme_id: number
-          updated_at: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          is_published?: boolean
-          published_at?: string | null
-          theme_id: number
-          updated_at?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          is_published?: boolean
-          published_at?: string | null
-          theme_id?: number
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "published_themes_theme_id_fkey"
-            columns: ["theme_id"]
-            isOneToOne: true
-            referencedRelation: "themes"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       themes: {
         Row: {

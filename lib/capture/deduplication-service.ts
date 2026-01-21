@@ -2,10 +2,17 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/supabase.types';
+import { createServiceLogger, type AppLogger } from '@/lib/logging';
 import type { Listing } from '@/lib/types';
 
 export class DeduplicationService {
-  constructor(private supabase: SupabaseClient<Database>) {}
+  private log: AppLogger;
+
+  constructor(private supabase: SupabaseClient<Database>, parentLogger?: AppLogger) {
+    this.log = parentLogger 
+      ? parentLogger.child({ service: 'DeduplicationService' })
+      : createServiceLogger('DeduplicationService');
+  }
 
   /**
    * Check if a listing already exists in the database
@@ -26,7 +33,7 @@ export class DeduplicationService {
       .maybeSingle();
 
     if (error) {
-      console.error('Error checking for existing listing:', error);
+      this.log.error({ err: error, marketplace, externalId }, 'Error checking for existing listing');
       throw error;
     }
 
@@ -57,10 +64,7 @@ export class DeduplicationService {
 
         if (error && error.code !== 'PGRST116') {
           // PGRST116 is "not found" which is fine
-          console.error(
-            `Error checking listing ${listing.marketplace}:${listing.external_id}:`,
-            error
-          );
+          this.log.warn({ err: error, marketplace: listing.marketplace, externalId: listing.external_id }, 'Error checking listing (continuing)');
           continue;
         }
 
@@ -69,10 +73,7 @@ export class DeduplicationService {
           existingMap.set(key, data.id);
         }
       } catch (error) {
-        console.error(
-          `Exception checking listing ${listing.marketplace}:${listing.external_id}:`,
-          error
-        );
+        this.log.warn({ err: error, marketplace: listing.marketplace, externalId: listing.external_id }, 'Exception checking listing (continuing)');
       }
     }
 
