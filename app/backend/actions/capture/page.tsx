@@ -4,6 +4,7 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { ChevronDown } from 'lucide-react';
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -11,22 +12,30 @@ import { Checkbox } from "@/components/ui/checkbox"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import { useTriggerCapture } from '@/hooks/use-capture';
-import { useBackendStatus } from '@/hooks/use-backend-status';
 import { useToast } from '@/hooks/use-toast';
 import { ActionPageHeader } from '@/components/backend/action-page-header';
 import { InngestPayloadCard } from '@/components/backend/inngest-payload-card';
+import { LegoSetSearch } from '@/components/catalog/lego-set-search';
+import type { LegoSetSearchResult } from '@/hooks/use-catalog-search';
 import type { EbaySearchParams } from '@/lib/capture/marketplace-adapters/ebay-adapter';
 
 export default function CapturePage() {
   const router = useRouter();
   const { toast } = useToast();
+  
+  // Selected LEGO set state
+  const [selectedSet, setSelectedSet] = useState<LegoSetSearchResult | null>(null);
   
   // Form state
   const [datasetName, setDatasetName] = useState('');
@@ -34,7 +43,7 @@ export default function CapturePage() {
   const [entriesPerPage, setEntriesPerPage] = useState('200');
   const [useEntriesPerPage, setUseEntriesPerPage] = useState(true);
   const [enablePagination, setEnablePagination] = useState(true);
-  const [maxResults, setMaxResults] = useState('10000');
+  const [maxResults, setMaxResults] = useState('500');
   const [listingTypeFixed, setListingTypeFixed] = useState(true);
   const [listingTypeAuction, setListingTypeAuction] = useState(true);
   const [useListingTypes, setUseListingTypes] = useState(true);
@@ -45,25 +54,35 @@ export default function CapturePage() {
   const [marketplaceId, setMarketplaceId] = useState('');
   const [useMarketplaceId, setUseMarketplaceId] = useState(false);
 
+  // Collapsible state
+  const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
+
   // Validation errors
   const [keywordsError, setKeywordsError] = useState('');
   const [entriesPerPageError, setEntriesPerPageError] = useState('');
   const [maxResultsError, setMaxResultsError] = useState('');
 
-  const { data: status, isLoading: loadingStatus } = useBackendStatus();
   const triggerCapture = useTriggerCapture();
 
-  const formatDateTime = (dateString: string | null) => {
-    if (!dateString) return null;
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleString();
-    } catch {
-      return null;
+  // Handle LEGO set selection
+  const handleSetSelect = (set: LegoSetSearchResult) => {
+    setSelectedSet(set);
+    // Auto-populate keywords: "{set name} Lego {set number prefix}"
+    const setNumPrefix = set.set_num.split('-')[0];
+    const autoKeywords = `${set.name} Lego ${setNumPrefix}`;
+    setKeywords(autoKeywords);
+    setKeywordsError('');
+    
+    // Auto-populate dataset name if empty
+    if (!datasetName.trim()) {
+      setDatasetName(set.name);
     }
   };
 
-  const lastCaptureDate = status?.lastCaptureJob ? formatDateTime(status.lastCaptureJob) : null;
+  const handleSetClear = () => {
+    setSelectedSet(null);
+    setKeywords('');
+  };
 
   // Generate JSON payload for Inngest
   const inngestPayload = useMemo(() => {
@@ -127,7 +146,7 @@ export default function CapturePage() {
     setKeywords('stranger things Lego');
     setEntriesPerPage('100');
     setMaxResults('100');
-    // Keep other defaults as they are
+    setSelectedSet(null);
   };
 
   const validateForm = (): boolean => {
@@ -143,7 +162,7 @@ export default function CapturePage() {
       .filter((k) => k.length > 0);
     
     if (keywordArray.length === 0) {
-      setKeywordsError('At least one keyword is required');
+      setKeywordsError('At least one keyword is required. Select a LEGO set or enter keywords manually.');
       isValid = false;
     }
 
@@ -276,25 +295,64 @@ export default function CapturePage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="space-y-6">
-              {/* Required Fields */}
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="datasetName">Dataset Name (optional)</Label>
-                  <Input
-                    id="datasetName"
-                    type="text"
-                    value={datasetName}
-                    onChange={(e) => setDatasetName(e.target.value)}
-                    placeholder="e.g., Harry Potter LEGO sets"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Optional. If provided, listings will be associated with this dataset. Dataset will be created automatically if it doesn't exist.
-                  </p>
-                </div>
+            {/* Main Form - Simplified */}
+            <div className="space-y-4">
+              {/* Dataset Name */}
+              <div className="space-y-2">
+                <Label htmlFor="datasetName">Dataset Name</Label>
+                <Input
+                  id="datasetName"
+                  type="text"
+                  value={datasetName}
+                  onChange={(e) => setDatasetName(e.target.value)}
+                  placeholder="e.g., Harry Potter LEGO sets"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional. Listings will be associated with this dataset.
+                </p>
+              </div>
 
+              {/* LEGO Set Search */}
+              <div className="space-y-2">
+                <Label>LEGO Set</Label>
+                <LegoSetSearch
+                  selectedSet={selectedSet}
+                  onSelect={handleSetSelect}
+                  onClear={handleSetClear}
+                  placeholder="Search for a LEGO set by name..."
+                />
+                <p className="text-xs text-muted-foreground">
+                  Search and select a LEGO set to auto-populate search keywords.
+                </p>
+                {keywordsError && !isCustomizeOpen && (
+                  <p className="text-xs text-destructive">{keywordsError}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Customize Job - Collapsible */}
+            <Collapsible
+              open={isCustomizeOpen}
+              onOpenChange={setIsCustomizeOpen}
+            >
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  type="button"
+                  className="w-full flex items-center justify-between p-0 h-auto font-medium hover:bg-transparent"
+                >
+                  <span className="text-sm">Customize Job</span>
+                  <ChevronDown
+                    className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${
+                      isCustomizeOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-4 space-y-6">
+                {/* Keywords (manual override) */}
                 <div className="space-y-2">
-                  <Label htmlFor="keywords">Keywords (comma-separated) *</Label>
+                  <Label htmlFor="keywords">Keywords (comma-separated)</Label>
                   <Input
                     id="keywords"
                     type="text"
@@ -304,7 +362,6 @@ export default function CapturePage() {
                       setKeywordsError('');
                     }}
                     placeholder="lego bulk, lego job lot, lego lot"
-                    required
                     className={keywordsError ? 'border-destructive' : ''}
                   />
                   {keywordsError && (
@@ -312,185 +369,185 @@ export default function CapturePage() {
                   )}
                   {!keywordsError && (
                     <p className="text-xs text-muted-foreground">
-                      Required. Enter one or more keywords separated by commas.
+                      Auto-populated from LEGO set selection, or enter manually.
                     </p>
                   )}
                 </div>
-              </div>
 
-              <Separator />
+                <Separator />
 
-              {/* Pagination Settings */}
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="enablePagination"
-                      checked={enablePagination}
-                      onCheckedChange={(checked) => setEnablePagination(checked === true)}
-                    />
-                    <Label htmlFor="enablePagination" className="font-medium">Enable Pagination</Label>
-                  </div>
-                  {enablePagination && (
-                    <div className="ml-6 space-y-2">
-                      <Label htmlFor="maxResults">Max Results (1-10000)</Label>
-                      <Input
-                        id="maxResults"
-                        type="number"
-                        value={maxResults}
-                        onChange={(e) => {
-                          setMaxResults(e.target.value);
-                          setMaxResultsError('');
-                        }}
-                        min="1"
-                        max="10000"
-                        placeholder="10000"
-                        className={maxResultsError ? 'border-destructive' : ''}
+                {/* Pagination Settings */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="enablePagination"
+                        checked={enablePagination}
+                        onCheckedChange={(checked) => setEnablePagination(checked === true)}
                       />
-                      {maxResultsError && (
-                        <p className="text-xs text-destructive">{maxResultsError}</p>
-                      )}
+                      <Label htmlFor="enablePagination" className="font-medium">Enable Pagination</Label>
                     </div>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="useEntriesPerPage"
-                      checked={useEntriesPerPage}
-                      onCheckedChange={(checked) => setUseEntriesPerPage(checked === true)}
-                    />
-                    <Label htmlFor="useEntriesPerPage">Entries Per Page</Label>
-                  </div>
-                  {useEntriesPerPage && (
-                    <div className="ml-6 space-y-2">
-                      <Input
-                        type="number"
-                        value={entriesPerPage}
-                        onChange={(e) => {
-                          setEntriesPerPage(e.target.value);
-                          setEntriesPerPageError('');
-                        }}
-                        min="1"
-                        max="200"
-                        placeholder="200"
-                        className={entriesPerPageError ? 'border-destructive' : ''}
-                      />
-                      {entriesPerPageError && (
-                        <p className="text-xs text-destructive">{entriesPerPageError}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Listing Types */}
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="useListingTypes"
-                      checked={useListingTypes}
-                      onCheckedChange={(checked) => setUseListingTypes(checked === true)}
-                    />
-                    <Label htmlFor="useListingTypes" className="font-medium">Listing Types</Label>
-                  </div>
-                  {useListingTypes && (
-                    <div className="ml-6 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          id="listingTypeFixed"
-                          checked={listingTypeFixed}
-                          onCheckedChange={(checked) => setListingTypeFixed(checked === true)}
+                    {enablePagination && (
+                      <div className="ml-6 space-y-2">
+                        <Label htmlFor="maxResults">Max Results (1-10000)</Label>
+                        <Input
+                          id="maxResults"
+                          type="number"
+                          value={maxResults}
+                          onChange={(e) => {
+                            setMaxResults(e.target.value);
+                            setMaxResultsError('');
+                          }}
+                          min="1"
+                          max="10000"
+                          placeholder="10000"
+                          className={maxResultsError ? 'border-destructive' : ''}
                         />
-                        <Label htmlFor="listingTypeFixed">FixedPrice</Label>
+                        {maxResultsError && (
+                          <p className="text-xs text-destructive">{maxResultsError}</p>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          id="listingTypeAuction"
-                          checked={listingTypeAuction}
-                          onCheckedChange={(checked) => setListingTypeAuction(checked === true)}
-                        />
-                        <Label htmlFor="listingTypeAuction">AuctionWithBIN</Label>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Optional Settings */}
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="useHideDuplicates"
-                      checked={useHideDuplicates}
-                      onCheckedChange={(checked) => setUseHideDuplicates(checked === true)}
-                    />
-                    <Label htmlFor="useHideDuplicates" className="font-medium">Hide Duplicate Items</Label>
+                    )}
                   </div>
-                  {useHideDuplicates && (
-                    <div className="ml-6">
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          id="hideDuplicates"
-                          checked={hideDuplicates}
-                          onCheckedChange={(checked) => setHideDuplicates(checked === true)}
-                        />
-                        <Label htmlFor="hideDuplicates">Enabled</Label>
-                      </div>
-                    </div>
-                  )}
-                </div>
 
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="useCategoryId"
-                      checked={useCategoryId}
-                      onCheckedChange={(checked) => setUseCategoryId(checked === true)}
-                    />
-                    <Label htmlFor="useCategoryId">Category ID</Label>
-                  </div>
-                  {useCategoryId && (
-                    <div className="ml-6">
-                      <Input
-                        type="text"
-                        value={categoryId}
-                        onChange={(e) => setCategoryId(e.target.value)}
-                        placeholder="220 (LEGO category)"
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="useEntriesPerPage"
+                        checked={useEntriesPerPage}
+                        onCheckedChange={(checked) => setUseEntriesPerPage(checked === true)}
                       />
+                      <Label htmlFor="useEntriesPerPage">Entries Per Page</Label>
                     </div>
-                  )}
+                    {useEntriesPerPage && (
+                      <div className="ml-6 space-y-2">
+                        <Input
+                          type="number"
+                          value={entriesPerPage}
+                          onChange={(e) => {
+                            setEntriesPerPage(e.target.value);
+                            setEntriesPerPageError('');
+                          }}
+                          min="1"
+                          max="200"
+                          placeholder="200"
+                          className={entriesPerPageError ? 'border-destructive' : ''}
+                        />
+                        {entriesPerPageError && (
+                          <p className="text-xs text-destructive">{entriesPerPageError}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="useMarketplaceId"
-                      checked={useMarketplaceId}
-                      onCheckedChange={(checked) => setUseMarketplaceId(checked === true)}
-                    />
-                    <Label htmlFor="useMarketplaceId">Marketplace ID</Label>
-                  </div>
-                  {useMarketplaceId && (
-                    <div className="ml-6">
-                      <Input
-                        type="text"
-                        value={marketplaceId}
-                        onChange={(e) => setMarketplaceId(e.target.value)}
-                        placeholder="EBAY_US, EBAY_GB, etc."
+                <Separator />
+
+                {/* Listing Types */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="useListingTypes"
+                        checked={useListingTypes}
+                        onCheckedChange={(checked) => setUseListingTypes(checked === true)}
                       />
+                      <Label htmlFor="useListingTypes" className="font-medium">Listing Types</Label>
                     </div>
-                  )}
+                    {useListingTypes && (
+                      <div className="ml-6 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            id="listingTypeFixed"
+                            checked={listingTypeFixed}
+                            onCheckedChange={(checked) => setListingTypeFixed(checked === true)}
+                          />
+                          <Label htmlFor="listingTypeFixed">FixedPrice</Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            id="listingTypeAuction"
+                            checked={listingTypeAuction}
+                            onCheckedChange={(checked) => setListingTypeAuction(checked === true)}
+                          />
+                          <Label htmlFor="listingTypeAuction">AuctionWithBIN</Label>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </div>
+
+                <Separator />
+
+                {/* Optional Settings */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="useHideDuplicates"
+                        checked={useHideDuplicates}
+                        onCheckedChange={(checked) => setUseHideDuplicates(checked === true)}
+                      />
+                      <Label htmlFor="useHideDuplicates" className="font-medium">Hide Duplicate Items</Label>
+                    </div>
+                    {useHideDuplicates && (
+                      <div className="ml-6">
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            id="hideDuplicates"
+                            checked={hideDuplicates}
+                            onCheckedChange={(checked) => setHideDuplicates(checked === true)}
+                          />
+                          <Label htmlFor="hideDuplicates">Enabled</Label>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="useCategoryId"
+                        checked={useCategoryId}
+                        onCheckedChange={(checked) => setUseCategoryId(checked === true)}
+                      />
+                      <Label htmlFor="useCategoryId">Category ID</Label>
+                    </div>
+                    {useCategoryId && (
+                      <div className="ml-6">
+                        <Input
+                          type="text"
+                          value={categoryId}
+                          onChange={(e) => setCategoryId(e.target.value)}
+                          placeholder="220 (LEGO category)"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="useMarketplaceId"
+                        checked={useMarketplaceId}
+                        onCheckedChange={(checked) => setUseMarketplaceId(checked === true)}
+                      />
+                      <Label htmlFor="useMarketplaceId">Marketplace ID</Label>
+                    </div>
+                    {useMarketplaceId && (
+                      <div className="ml-6">
+                        <Input
+                          type="text"
+                          value={marketplaceId}
+                          onChange={(e) => setMarketplaceId(e.target.value)}
+                          placeholder="EBAY_US, EBAY_GB, etc."
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </CardContent>
           <CardFooter>
             <Button
