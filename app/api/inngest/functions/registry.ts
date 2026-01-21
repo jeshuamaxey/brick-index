@@ -10,6 +10,7 @@ export const INNGEST_FUNCTION_IDS = {
   CATALOG_REFRESH_JOB: 'catalog-refresh-job',
   RECONCILE_JOB: 'reconcile-job',
   HANDLE_JOB_CANCELLATION: 'handle-job-cancellation',
+  RUN_PIPELINE_TO_COMPLETION: 'run-pipeline-to-completion',
 } as const;
 
 // Map function IDs to job types
@@ -22,6 +23,7 @@ export const FUNCTION_TO_JOB_TYPE: Record<string, string> = {
   [INNGEST_FUNCTION_IDS.CATALOG_REFRESH_JOB]: 'lego_catalog_refresh',
   [INNGEST_FUNCTION_IDS.RECONCILE_JOB]: 'reconcile',
   // handle-job-cancellation doesn't have a job type (it's a system handler)
+  // run-pipeline-to-completion doesn't have a job type (it's an orchestrator that invokes other jobs)
 };
 
 /**
