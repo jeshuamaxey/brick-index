@@ -1,4 +1,5 @@
-// Supabase client for server-side operations
+// Supabase client for server-side operations (deprecated - use server.ts instead)
+// This file is kept for backward compatibility but new code should use server.ts
 
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './supabase.types';

@@ -102,6 +102,16 @@ All data related to user-facing features:
 
 - `POST /api/discover/notify` - Process notifications (matching and email)
 
+## Authentication
+
+The application uses Supabase for authentication with role-based access control (RBAC). See [Authentication Documentation](./docs/auth.md) for details.
+
+- Sign up at `/auth/signup`
+- Sign in at `/auth/signin`
+- Account page at `/account` (requires authentication)
+
+All `/backend/*` routes require authentication and the `backend.access` permission.
+
 ## Dev Frontend
 
 Access dev pages at:
