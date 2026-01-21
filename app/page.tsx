@@ -7,6 +7,9 @@ export default function Home() {
       <Link href="/backend" className="text-blue-500 hover:text-blue-700">
           Backend
       </Link>
+      <Link href="/preview/components" className="text-blue-500 hover:text-blue-700">
+          Component Preview
+      </Link>
     </div>
   );
 }

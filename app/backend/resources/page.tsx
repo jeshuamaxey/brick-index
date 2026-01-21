@@ -266,9 +266,9 @@ export default function ResourcesPage() {
                       <YAxis tickLine={false} axisLine={false} tickFormatter={(value: string | number) => Number.parseInt(String(value)).toLocaleString()} />
                       <ChartTooltip
                         cursor={false}
-                        content={<ChartTooltipContent hideLabel formatter={(value) => {
+                        content={<ChartTooltipContent hideLabel formatter={(value: unknown) => {
                         const i = chartData.findIndex(d => d.count === value);
-                        if (i === -1) return value;
+                        if (i === -1) return String(value);
                         const pc = chartData[i].percentage.toFixed(2) + '%';
 
                         return `Converted: ${pc}`;
