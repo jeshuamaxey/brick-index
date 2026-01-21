@@ -7,6 +7,39 @@ export type Json =
   | Json[]
 
 export type Database = {
+  analytics: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      set_price_aggregates: {
+        Row: {
+          avg_price: number | null
+          avg_price_per_piece: number | null
+          last_listing_seen_at: string | null
+          lego_set_id: string | null
+          listing_count: number | null
+          max_price: number | null
+          median_price: number | null
+          min_price: number | null
+          set_num: string | null
+        }
+        Relationships: []
+      }
+    }
+    Functions: {
+      refresh_set_price_aggregates: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   catalog: {
     Tables: {
       csv_file_metadata: {
@@ -49,6 +82,7 @@ export type Database = {
           last_modified: string | null
           name: string
           num_parts: number | null
+          publish_override: boolean | null
           set_img_url: string | null
           set_num: string
           set_url: string | null
@@ -62,6 +96,7 @@ export type Database = {
           last_modified?: string | null
           name: string
           num_parts?: number | null
+          publish_override?: boolean | null
           set_img_url?: string | null
           set_num: string
           set_url?: string | null
@@ -75,6 +110,7 @@ export type Database = {
           last_modified?: string | null
           name?: string
           num_parts?: number | null
+          publish_override?: boolean | null
           set_img_url?: string | null
           set_num?: string
           set_url?: string | null
@@ -83,6 +119,41 @@ export type Database = {
           year?: number | null
         }
         Relationships: []
+      }
+      published_themes: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_published: boolean
+          published_at: string | null
+          theme_id: number
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_published?: boolean
+          published_at?: string | null
+          theme_id: number
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_published?: boolean
+          published_at?: string | null
+          theme_id?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "published_themes_theme_id_fkey"
+            columns: ["theme_id"]
+            isOneToOne: true
+            referencedRelation: "themes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       themes: {
         Row: {
@@ -121,7 +192,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_published_sets: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: string
+          set_num: string
+          name: string
+          year: number
+          theme_id: number
+          num_parts: number
+          set_img_url: string
+          set_url: string
+          publish_override: boolean
+          is_theme_published: boolean
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

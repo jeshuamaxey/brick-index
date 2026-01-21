@@ -16,6 +16,10 @@ export type SearchResult = Database['public']['Tables']['search_results']['Row']
 export type LegoSet = Database['catalog']['Tables']['lego_sets']['Row'];
 export type Theme = Database['catalog']['Tables']['themes']['Row'];
 export type CsvFileMetadata = Database['catalog']['Tables']['csv_file_metadata']['Row'];
+export type PublishedTheme = Database['catalog']['Tables']['published_themes']['Row'];
+
+// Analytics types
+export type SetPriceAggregate = Database['analytics']['Views']['set_price_aggregates']['Row'];
 
 // Join types
 export type LegoSetJoin = Database['pipeline']['Tables']['listing_lego_set_joins']['Row'];
@@ -57,5 +61,38 @@ export interface Dataset {
   updated_at: string;
   user_id: string;
   listing_count?: number; // Optional, for display purposes
+}
+
+// Consumer pricing types
+export interface PriceAggregate {
+  avgPrice: number;
+  medianPrice: number | null;
+  minPrice: number | null;
+  maxPrice: number | null;
+  avgPricePerPiece: number;
+  listingCount: number;
+  changePercentage?: number;
+  lastListingSeenAt?: string | null;
+}
+
+export interface PriceHistoryPoint {
+  date: string;
+  avgPrice: number;
+  minPrice: number | null;
+  maxPrice: number | null;
+  listingCount: number;
+}
+
+// Published set with pricing data for consumer pages
+export interface PublishedSetWithPricing {
+  id: string;
+  setNum: string;
+  name: string;
+  year: number | null;
+  themeId: number | null;
+  numParts: number | null;
+  setImgUrl: string | null;
+  setUrl: string | null;
+  pricing: PriceAggregate | null;
 }
 

@@ -19,9 +19,19 @@ export const captureJob = inngest.createFunction(
     // Note: Logger creation outside steps, but logging inside steps to avoid duplicates during replay
     let log = createJobLogger('pending', 'capture');
     let jobId: string | null = null;
+    const startTime = Date.now();
 
     try {
       const { marketplace, keywords, ebayParams, datasetId, datasetName, userId } = event.data;
+      
+      log.info({
+        marketplace,
+        keywords,
+        datasetId,
+        datasetName,
+        userId,
+        ebayParams: ebayParams ? Object.keys(ebayParams as object) : null,
+      }, 'Capture job started');
 
       // Step 1: Create job record
       const job = await step.run('create-job', async () => {
@@ -41,7 +51,9 @@ export const captureJob = inngest.createFunction(
           metadata.user_id = userId;
         }
         
-        return await jobService.createJob(jobType, marketplace, metadata, datasetId || null);
+        const createdJob = await jobService.createJob(jobType, marketplace, metadata, datasetId || null);
+        log.info({ jobId: createdJob.id, jobType, marketplace }, 'Job record created');
+        return createdJob;
       });
 
       jobId = job.id;
@@ -88,6 +100,15 @@ export const captureJob = inngest.createFunction(
         const fieldgroups = params?.fieldgroups || 'EXTENDED';
         const marketplaceId = params?.marketplaceId || process.env.EBAY_MARKETPLACE_ID || 'EBAY_US';
 
+        log.info({
+          jobId,
+          keywordQuery,
+          limit,
+          maxResults,
+          fieldgroups,
+          marketplaceId,
+        }, 'Search config prepared');
+
         return {
           ebayAppId,
           keywordQuery,
@@ -128,6 +149,27 @@ export const captureJob = inngest.createFunction(
 
           const items = response.itemSummaries || [];
           
+          // Log eBay API response
+          log.info({
+            jobId,
+            pageNumber,
+            offset,
+            requestedLimit: searchConfig.limit,
+            itemsReturned: items.length,
+            totalAvailable: response.total ?? null,
+            hasNextPage: !!response.next,
+            warningCount: response.warnings?.length ?? 0,
+          }, 'eBay API response received');
+          
+          // Log warnings separately if present
+          if (response.warnings && response.warnings.length > 0) {
+            log.info({
+              jobId,
+              pageNumber,
+              warnings: response.warnings,
+            }, 'eBay API returned warnings');
+          }
+          
           // Store immediately to database
           const ids: string[] = [];
           for (const item of items) {
@@ -143,7 +185,7 @@ export const captureJob = inngest.createFunction(
               .single();
 
             if (rawError) {
-              log.warn({ err: rawError }, 'Error storing raw listing (continuing)');
+              log.error({ err: rawError, jobId, pageNumber }, 'Failed to store raw listing');
               continue;
             }
 
@@ -163,6 +205,15 @@ export const captureJob = inngest.createFunction(
             response.next && 
             currentTotal < searchConfig.maxResults &&
             (totalAvailable === null || offset + searchConfig.limit < totalAvailable);
+
+          log.debug({
+            jobId,
+            pageNumber,
+            itemsStored: ids.length,
+            totalAvailable,
+            shouldContinue,
+            offset,
+          }, 'Page fetched');
 
           return {
             pageNumber,
@@ -196,9 +247,22 @@ export const captureJob = inngest.createFunction(
       }
 
       const listingsFound = totalItems;
+      
+      log.info({
+        jobId,
+        totalPages: pageNumber,
+        listingsFound,
+        rawListingIdsCount: rawListingIds.length,
+      }, 'Search pagination complete');
 
       // Step 5: Associate raw_listings with dataset if datasetId is provided
       if (datasetId && rawListingIds.length > 0) {
+        log.info({
+          jobId,
+          datasetId,
+          rawListingCount: rawListingIds.length,
+        }, 'Associating raw listings with dataset');
+        
         await step.run('associate-raw-listings-with-dataset', async () => {
           const { DatasetService } = await import('@/lib/datasets/dataset-service');
           // Use service role client - dataset was already validated to belong to user when capture was triggered
@@ -206,6 +270,7 @@ export const captureJob = inngest.createFunction(
           
           try {
             await datasetService.addRawListingsToDataset(datasetId, rawListingIds);
+            log.info({ jobId, datasetId }, 'Dataset association complete');
           } catch (error) {
             // Log but don't fail the job if dataset association fails
             log.warn({ err: error, datasetId }, 'Error associating raw_listings with dataset (continuing)');
@@ -225,6 +290,15 @@ export const captureJob = inngest.createFunction(
         );
       });
 
+      const durationMs = Date.now() - startTime;
+      log.info({
+        jobId,
+        listingsFound,
+        rawListingsStored: listingsFound,
+        durationMs,
+        durationFormatted: `${Math.round(durationMs / 1000)}s`,
+      }, 'Capture job completed successfully');
+
       return {
         jobId,
         status: 'completed',
@@ -232,7 +306,13 @@ export const captureJob = inngest.createFunction(
         raw_listings_stored: listingsFound,
       };
     } catch (error) {
-      log.error({ err: error }, 'Error in capture job');
+      const durationMs = Date.now() - startTime;
+      log.error({
+        err: error,
+        jobId,
+        durationMs,
+        durationFormatted: `${Math.round(durationMs / 1000)}s`,
+      }, 'Capture job failed');
       
       // Mark job as failed if it was created
       if (jobId) {

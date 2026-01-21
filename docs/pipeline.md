@@ -516,6 +516,24 @@ All data related to the capture and analysis pipeline:
   - Includes progress tracking (`updated_at`, `last_update`), timeout management (`timeout_at`), and statistics
   - Metadata field (JSONB) stores job-specific parameters
 
+### `catalog` Schema
+
+Reference/master data for LEGO products:
+- **`lego_sets`**: Official LEGO sets catalog from Rebrickable
+- **`themes`**: LEGO theme hierarchy (parent-child relationships)
+- **`published_themes`**: Controls which themes are visible to consumers
+- **`csv_file_metadata`**: ETL metadata for catalog refresh
+
+### `analytics` Schema
+
+Derived analytics and aggregated data computed from pipeline tables:
+- **`set_price_aggregates`**: Materialized view of pre-computed pricing metrics per LEGO set
+  - Joins `listings` and `listing_analysis` to `lego_sets`
+  - Includes: `avg_price`, `median_price`, `min_price`, `max_price`, `avg_price_per_piece`, `listing_count`
+  - Must be refreshed via `analytics.refresh_set_price_aggregates()` after data changes
+
+This schema is designed for future expansion (e.g., market-based aggregates, time-series views).
+
 ### `public` Schema
 
 All data related to user-facing features:
