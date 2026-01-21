@@ -7,6 +7,8 @@ Please prepare this work for a pull request by completing all necessary checks f
 - update the supabase types (npm run generate:suapbase types)
 - ensure the test suite passes. If it does not, inspect the output of the test run, update the code. Repeat until the tests pass
 - ensure the type check passes (npm run type-check). If it does not, inspect the output of the check and update the code. Repeat until the check passes
+- ensure the application builds (npm run build). If it does not, inspect the output of the build, update the code. Repeat until the applcation builds
+- ensure the migrations run (npx supabase db reset). If it does not, inspect the output of the migrations, update the code. Repeat until the migratiosn run without error
 
 ## Maintain repo hygiene
 
