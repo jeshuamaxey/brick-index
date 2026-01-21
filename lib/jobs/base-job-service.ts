@@ -41,7 +41,8 @@ export class BaseJobService {
   async createJob(
     type: JobType,
     marketplace: string,
-    metadata: Record<string, unknown> = {}
+    metadata: Record<string, unknown> = {},
+    datasetId?: string | null
   ): Promise<Job> {
     const now = new Date();
     const nowISO = now.toISOString();
@@ -50,22 +51,37 @@ export class BaseJobService {
     const timeoutMs = this.getJobTimeout(type);
     const timeoutAt = new Date(now.getTime() + timeoutMs);
     
-    const { data: job, error } = await this.supabase
+    // Extract dataset_id from metadata if not provided directly (for backward compatibility)
+    const resolvedDatasetId = datasetId || (metadata.dataset_id as string | undefined) || null;
+    
+    // Remove dataset_id from metadata if it exists (we store it in the column now)
+    const cleanMetadata = { ...metadata };
+    if ('dataset_id' in cleanMetadata) {
+      delete cleanMetadata.dataset_id;
+    }
+    
+    // Build insert object - include dataset_id in the column, not in metadata
+    const insertData: any = {
+      type,
+      marketplace,
+      status: 'running',
+      listings_found: 0,
+      listings_new: 0,
+      listings_updated: 0,
+      started_at: nowISO,
+      updated_at: nowISO,
+      timeout_at: timeoutAt.toISOString(),
+      last_update: 'Job started',
+      metadata: cleanMetadata as Json,
+      dataset_id: resolvedDatasetId,
+    };
+    
+    // Use type assertion to bypass TypeScript checking for dataset_id field
+    // The column exists in the database (via migration), but types may not be regenerated
+    const { data: job, error } = await (this.supabase
       .schema('pipeline')
-      .from('jobs')
-      .insert({
-        type,
-        marketplace,
-        status: 'running',
-        listings_found: 0,
-        listings_new: 0,
-        listings_updated: 0,
-        started_at: nowISO,
-        updated_at: nowISO,
-        timeout_at: timeoutAt.toISOString(),
-        last_update: 'Job started',
-        metadata: metadata as Json,
-      })
+      .from('jobs') as any)
+      .insert(insertData)
       .select()
       .single();
 
