@@ -6,13 +6,24 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { BreadcrumbNav } from "./components/breadcrumb-nav"
-import { DevAuthButton } from "./components/dev-auth-button"
+import { UserMenu } from "./components/user-menu"
+import { requirePermission } from "@/lib/auth/auth-helpers"
+import { redirect } from "next/navigation"
 
-export default function BackendLayout({
+export default async function BackendLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  // Check authentication and permission server-side
+  try {
+    await requirePermission('backend.access');
+  } catch (error) {
+    // If permission check fails, redirect to sign in
+    // Middleware should have caught this, but this is a double-check
+    redirect('/auth/signin?error=permission_denied');
+  }
+
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -24,7 +35,7 @@ export default function BackendLayout({
             <BreadcrumbNav />
           </div>
           <div className="px-3">
-            <DevAuthButton />
+            <UserMenu />
           </div>
         </header>
         <div className="flex flex-col h-[calc(100vh-4rem)] overflow-y-auto">

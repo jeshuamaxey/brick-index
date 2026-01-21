@@ -5,6 +5,7 @@
     "cp -r /Users/jeshua/dev/bricks/data data",
     "npm install",
     "npm run seed:load-ebay-snapshot-into-supabase",
-    "npm run test:ebay-token"
+    "npm run test:ebay-token",
+    "tsx scripts/create-admin-user.ts admin@example.com password"
   ]
 }
