@@ -3,6 +3,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { supabaseServer } from '@/lib/supabase/server';
 import type { Database } from '@/lib/supabase/supabase.types';
 
+// Note: Edge middleware cannot use Pino (Node.js only). Use console for minimal Edge logging.
+
 export async function middleware(request: NextRequest) {
   // Only protect /backend/* routes
   if (!request.nextUrl.pathname.startsWith('/backend')) {
@@ -73,7 +75,9 @@ export async function middleware(request: NextRequest) {
     }
   } catch (error) {
     // Error checking permission - redirect to sign in for safety
-    console.error('Error checking permission in middleware:', error);
+    // Note: Using console here because Edge middleware cannot use Pino
+    // eslint-disable-next-line no-console
+    console.error('[Auth Middleware] Error checking permission:', { userId: user.id, error });
     const signInUrl = new URL('/auth/signin', request.url);
     signInUrl.searchParams.set('error', 'auth_error');
     return NextResponse.redirect(signInUrl);

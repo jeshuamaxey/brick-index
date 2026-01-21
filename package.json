@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:pretty": "next dev 2>&1 | pino-pretty",
     "dev:inngest": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest",
     "build": "next build",
     "start": "next start",
@@ -46,6 +47,7 @@
     "msw": "^2.12.4",
     "next": "16.0.10",
     "nock": "^14.0.10",
+    "pino": "^9.6.0",
     "react": "19.2.1",
     "react-dom": "19.2.1",
     "recharts": "^2.15.4",
@@ -56,6 +58,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "pino-pretty": "^13.0.0",
     "@types/html-to-text": "^9.0.4",
     "@types/node": "^20",
     "@types/react": "^19",

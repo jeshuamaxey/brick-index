@@ -2,6 +2,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/supabase/supabase.types';
+import { createServiceLogger, type AppLogger } from '@/lib/logging';
 import type { Job, JobType } from '@/lib/types';
 
 export interface JobStats {
@@ -26,7 +27,13 @@ const JOB_TIMEOUTS: Record<string, number> = {
 const DEFAULT_TIMEOUT = 30 * 60 * 1000;
 
 export class BaseJobService {
-  constructor(private supabase: SupabaseClient<Database>) {}
+  private log: AppLogger;
+
+  constructor(private supabase: SupabaseClient<Database>, parentLogger?: AppLogger) {
+    this.log = parentLogger 
+      ? parentLogger.child({ service: 'BaseJobService' })
+      : createServiceLogger('BaseJobService');
+  }
 
   /**
    * Get timeout duration for a job type in milliseconds
@@ -136,7 +143,7 @@ export class BaseJobService {
       .eq('id', jobId);
 
     if (error) {
-      console.error('Error updating job progress:', error);
+      this.log.warn({ err: error, jobId }, 'Error updating job progress (non-critical)');
       // Don't throw - progress updates are best effort
     }
   }

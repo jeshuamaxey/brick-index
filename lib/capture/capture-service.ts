@@ -6,15 +6,20 @@ import type { MarketplaceAdapter } from './marketplace-adapters/base-adapter';
 import { DeduplicationService } from './deduplication-service';
 import { BaseJobService } from '@/lib/jobs/base-job-service';
 import { JobProgressTracker } from '@/lib/jobs/job-progress-tracker';
+import { createServiceLogger, type AppLogger } from '@/lib/logging';
 import type { Job, JobType, RawListing, Listing } from '@/lib/types';
 
 export class CaptureService {
   private deduplicationService: DeduplicationService;
   private jobService: BaseJobService;
+  private log: AppLogger;
 
-  constructor(private supabase: SupabaseClient<Database>) {
+  constructor(private supabase: SupabaseClient<Database>, parentLogger?: AppLogger) {
     this.deduplicationService = new DeduplicationService(supabase);
     this.jobService = new BaseJobService(supabase);
+    this.log = parentLogger 
+      ? parentLogger.child({ service: 'CaptureService' })
+      : createServiceLogger('CaptureService');
   }
 
   /**
@@ -94,7 +99,7 @@ export class CaptureService {
           .single();
 
         if (rawError) {
-          console.error('Error storing raw listing:', rawError);
+          this.log.warn({ err: rawError }, 'Error storing raw listing (continuing)');
           continue;
         }
 
@@ -127,7 +132,7 @@ export class CaptureService {
           const listing = adapter.transformToListing(rawResponse, rawListingId);
           listings.push(listing);
         } catch (error) {
-          console.error('Error transforming listing:', error);
+          this.log.warn({ err: error, rawListingId }, 'Error transforming listing (skipping)');
         }
 
         // Update progress periodically
@@ -168,7 +173,7 @@ export class CaptureService {
           .insert(listingsToInsert);
 
         if (insertError) {
-          console.error('Error inserting new listings:', insertError);
+          this.log.error({ err: insertError }, 'Error inserting new listings');
         } else {
           listingsNew = newListings.length;
         }
@@ -188,7 +193,7 @@ export class CaptureService {
           .in('id', existingListingIds);
 
         if (updateError) {
-          console.error('Error updating existing listings:', updateError);
+          this.log.error({ err: updateError }, 'Error updating existing listings');
         } else {
           listingsUpdated = existingIds.size;
         }

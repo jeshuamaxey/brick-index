@@ -6,6 +6,7 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { BaseJobService } from '@/lib/jobs/base-job-service';
 import { TextExtractor } from '@/lib/analyze/text-extractor';
 import { SimplePricePerPieceEvaluator } from '@/lib/analyze/value-evaluator/simple-price-per-piece';
+import { createJobLogger } from '@/lib/logging';
 import type { JobType } from '@/lib/types';
 import type { Database, Json } from '@/lib/supabase/supabase.types';
 
@@ -25,10 +26,14 @@ export const analyzeJob = inngest.createFunction(
   { id: INNGEST_FUNCTION_IDS.ANALYZE_JOB },
   { event: 'job/analyze.triggered' },
   async ({ event, step }) => {
+    // Note: Logger creation outside steps, but logging inside steps to avoid duplicates during replay
+    let log = createJobLogger('pending', 'analyze');
+
     const { listingIds, limit, datasetId } = event.data;
 
     // Step 1: Create job record
     const job = await step.run('create-job', async () => {
+      log.info({ eventData: event.data }, 'Analyze job triggered');
       const jobService = new BaseJobService(supabaseServer);
       const metadata: Record<string, unknown> = {
         listingIds: listingIds || null,
@@ -44,6 +49,7 @@ export const analyzeJob = inngest.createFunction(
     });
 
     const jobId = job.id;
+    log = log.child({ jobId });
 
     // Step 2: Initialize analyzers
     const textExtractor = new TextExtractor();
@@ -307,7 +313,7 @@ export const analyzeJob = inngest.createFunction(
               listingId,
               error: errorMessage,
             });
-            console.error(`Error analyzing listing ${listingId}:`, errorMessage);
+            log.warn({ err: error, listingId }, 'Error analyzing listing (continuing)');
           }
         }
 

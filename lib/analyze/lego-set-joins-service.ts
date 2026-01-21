@@ -2,9 +2,16 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/supabase.types';
+import { createServiceLogger, type AppLogger } from '@/lib/logging';
 
 export class LegoSetJoinsService {
-  constructor(private supabase: SupabaseClient<Database>) {}
+  private log: AppLogger;
+
+  constructor(private supabase: SupabaseClient<Database>, parentLogger?: AppLogger) {
+    this.log = parentLogger 
+      ? parentLogger.child({ service: 'LegoSetJoinsService' })
+      : createServiceLogger('LegoSetJoinsService');
+  }
 
   /**
    * Check if a set_num prefix is in the year-like range (1990-2050)
@@ -130,7 +137,7 @@ export class LegoSetJoinsService {
         .maybeSingle();
 
       if (checkError) {
-        console.error(`[LegoSetJoinsService] Error checking existing join:`, checkError);
+        this.log.error({ err: checkError, listingId: join.listing_id, legoSetId: join.lego_set_id }, 'Error checking existing join');
         throw new Error(`Failed to check existing join: ${checkError.message}`);
       }
 
@@ -148,7 +155,7 @@ export class LegoSetJoinsService {
           .eq('id', existing.id);
 
         if (updateError) {
-          console.error(`[LegoSetJoinsService] Error updating join:`, updateError);
+          this.log.error({ err: updateError, joinId: existing.id }, 'Error updating join');
           throw new Error(`Failed to update join: ${updateError.message}`);
         }
       } else {
@@ -160,7 +167,7 @@ export class LegoSetJoinsService {
           .select();
 
         if (insertError) {
-          console.error(`[LegoSetJoinsService] Error inserting join:`, insertError);
+          this.log.error({ err: insertError, listingId: join.listing_id, legoSetId: join.lego_set_id }, 'Error inserting join');
           throw new Error(`Failed to insert join: ${insertError.message}`);
         }
       }
