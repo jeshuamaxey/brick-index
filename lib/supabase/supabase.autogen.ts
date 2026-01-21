@@ -7,6 +7,39 @@ export type Json =
   | Json[]
 
 export type Database = {
+  analytics: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      set_price_aggregates: {
+        Row: {
+          avg_price: number | null
+          avg_price_per_piece: number | null
+          last_listing_seen_at: string | null
+          lego_set_id: string | null
+          listing_count: number | null
+          max_price: number | null
+          median_price: number | null
+          min_price: number | null
+          set_num: string | null
+        }
+        Relationships: []
+      }
+    }
+    Functions: {
+      refresh_set_price_aggregates: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   catalog: {
     Tables: {
       csv_file_metadata: {
