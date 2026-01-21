@@ -241,3 +241,11 @@ Comprehensive test suite located in `tests/auth/`:
 1. Ensure templates are in `supabase/templates/` directory
 2. Check `supabase/config.toml` has correct template paths
 3. Restart Supabase local instance after template changes
+
+### oauth_client_id errors
+
+If you encounter "missing destination name oauth_client_id" errors:
+
+1. **In Supabase Cloud**: This is typically handled automatically by Supabase's infrastructure
+2. **In local Supabase**: Update to the latest Supabase version or restart your local instance
+3. **Note**: The migration to fix this was removed as it requires owner privileges not available in CI/production environments. Authentication works correctly with server-side sign-in even without this migration.
