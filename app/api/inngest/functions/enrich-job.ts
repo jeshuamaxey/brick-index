@@ -31,7 +31,30 @@ export const enrichJob = inngest.createFunction(
   async ({ event, step }) => {
     const { marketplace, captureJobId, limit, delayMs = 200, datasetId } = event.data;
 
-    // Step 1: Create job record
+    // Step 1: Get dataset_id from capture job if not provided
+    const resolvedDatasetId = await step.run('get-dataset-id', async () => {
+      if (datasetId) {
+        return datasetId;
+      }
+      
+      // Try to get from capture job's dataset_id column if captureJobId is provided
+      if (captureJobId) {
+        const { data: captureJob, error } = await supabaseServer
+          .schema('pipeline')
+          .from('jobs')
+          .select('dataset_id')
+          .eq('id', captureJobId)
+          .single();
+        
+        if (!error && captureJob) {
+          return (captureJob as { dataset_id: string | null }).dataset_id || null;
+        }
+      }
+      
+      return null;
+    });
+
+    // Step 2: Create job record
     const job = await step.run('create-job', async () => {
       const jobService = new BaseJobService(supabaseServer);
       const jobType: JobType = `${marketplace}_enrich_listings` as JobType;
@@ -42,11 +65,7 @@ export const enrichJob = inngest.createFunction(
         captureJobId: captureJobId || null,
       };
       
-      if (datasetId) {
-        metadata.dataset_id = datasetId;
-      }
-      
-      return await jobService.createJob(jobType, marketplace, metadata);
+      return await jobService.createJob(jobType, marketplace, metadata, resolvedDatasetId);
     });
 
     const jobId = job.id;
@@ -72,13 +91,13 @@ export const enrichJob = inngest.createFunction(
       }
 
       // Filter by dataset if provided
-      if (datasetId) {
+      if (resolvedDatasetId) {
         // Get all raw_listing IDs in the dataset
         const { data: datasetRawListings, error: datasetError } = await supabaseServer
           .schema('public')
           .from('dataset_raw_listings')
           .select('raw_listing_id')
-          .eq('dataset_id', datasetId);
+          .eq('dataset_id', resolvedDatasetId);
 
         if (datasetError) {
           throw new Error(`Failed to get dataset raw_listings: ${datasetError.message}`);

@@ -78,14 +78,11 @@ export const reconcileJob = inngest.createFunction(
         rerun: rerun,
       };
       
-      if (datasetId) {
-        metadata.dataset_id = datasetId;
-      }
-      
       const createdJob = await jobService.createJob(
         'reconcile' as JobType,
         'all', // Marketplace doesn't really apply to reconcile
-        metadata
+        metadata,
+        datasetId
       );
       return createdJob;
     });

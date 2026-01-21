@@ -36,14 +36,11 @@ export const sanitizeJob = inngest.createFunction(
           limit: limit || null,
         };
         
-        if (datasetId) {
-          metadata.dataset_id = datasetId;
-        }
-        
         return await jobService.createJob(
           'sanitize_listings' as JobType,
           'all', // Marketplace doesn't really apply to sanitize
-          metadata
+          metadata,
+          datasetId
         );
       });
 

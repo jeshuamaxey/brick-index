@@ -30,9 +30,6 @@ export const captureJob = inngest.createFunction(
         };
         
         // Add dataset information to metadata if provided
-        if (datasetId) {
-          metadata.dataset_id = datasetId;
-        }
         if (datasetName) {
           metadata.dataset_name = datasetName;
         }
@@ -40,7 +37,7 @@ export const captureJob = inngest.createFunction(
           metadata.user_id = userId;
         }
         
-        return await jobService.createJob(jobType, marketplace, metadata);
+        return await jobService.createJob(jobType, marketplace, metadata, datasetId || null);
       });
 
       jobId = job.id;
