@@ -103,6 +103,7 @@ All data related to user-facing features:
 - `GET /api/datasets` - List datasets for the authenticated user
 - `GET /api/datasets/[datasetId]/progress` - Get pipeline progress and job statuses for a dataset
 - `POST /api/datasets/[datasetId]/run-next-job` - Trigger the next pending pipeline job for a dataset
+- `POST /api/datasets/[datasetId]/run-to-completion` - Run all remaining pipeline jobs sequentially until completion
 
 ### Discover
 
