@@ -202,6 +202,7 @@ export type Database = {
       jobs: {
         Row: {
           completed_at: string | null
+          dataset_id: string | null
           error_message: string | null
           id: string
           last_update: string | null
@@ -218,6 +219,7 @@ export type Database = {
         }
         Insert: {
           completed_at?: string | null
+          dataset_id?: string | null
           error_message?: string | null
           id?: string
           last_update?: string | null
@@ -234,6 +236,7 @@ export type Database = {
         }
         Update: {
           completed_at?: string | null
+          dataset_id?: string | null
           error_message?: string | null
           id?: string
           last_update?: string | null
